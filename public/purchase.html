@@ -82,6 +82,24 @@
                 <button id="checkoutCart" class="buy-btn" type="button">Comprar carrito</button>
             </div>
         </section>
+
+        <section id="purchaseSuccessBanner" class="purchase-success hidden" aria-live="polite">
+            <div class="purchase-success-card">
+                <h2>Tu compra fue exitosa</h2>
+                <p id="purchaseSuccessDetail">Gracias por tu compra.</p>
+                <div id="purchaseSuccessSummary" class="purchase-success-summary"></div>
+                <div id="purchaseTicketsWrap" class="purchase-tickets-wrap hidden">
+                    <div class="section-title-row purchase-ticket-head">
+                        <div>
+                            <h2>Boletos generados</h2>
+                            <p class="ticket-summary">Descarga o imprime cada boleto con su QR.</p>
+                        </div>
+                    </div>
+                    <div id="purchaseTicketsGrid" class="purchase-tickets-grid"></div>
+                </div>
+                <button id="closePurchaseSuccess" type="button">Continuar</button>
+            </div>
+        </section>
     </main>
 
     <div id="toastRoot" class="toasts"></div>
@@ -102,6 +120,191 @@
         const checkoutRows = document.getElementById('checkoutRows');
         const cartItems = document.getElementById('cartItems');
         const cartTotal = document.getElementById('cartTotal');
+        const purchaseSuccessBanner = document.getElementById('purchaseSuccessBanner');
+        const purchaseSuccessDetail = document.getElementById('purchaseSuccessDetail');
+        const purchaseSuccessSummary = document.getElementById('purchaseSuccessSummary');
+        const purchaseTicketsWrap = document.getElementById('purchaseTicketsWrap');
+        const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
+        let lastPurchasedTickets = [];
+
+        function showPurchaseSuccess(message, summaryHtml = '') {
+            purchaseSuccessDetail.textContent = message || 'Gracias por tu compra.';
+            purchaseSuccessSummary.innerHTML = summaryHtml;
+            purchaseSuccessBanner.classList.remove('hidden');
+        }
+
+        function hidePurchaseSuccess() {
+            purchaseSuccessBanner.classList.add('hidden');
+            purchaseTicketsWrap.classList.add('hidden');
+            purchaseTicketsGrid.innerHTML = '';
+            purchaseSuccessSummary.innerHTML = '';
+            purchaseSuccessDetail.textContent = 'Gracias por tu compra.';
+            lastPurchasedTickets = [];
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeAttribute(value) {
+            return escapeHtml(value).replace(/`/g, '&#96;');
+        }
+
+        function buildTicketCardMarkup(ticket, index) {
+            const event = ticket.event || state.event || {};
+            const ticketType = ticket.ticketType || {};
+            const eventImage = event.image_url || 'https://placehold.co/520x760?text=Evento';
+            const seatNumber = ticket.seatNumber || 'N/A';
+            const qrSvg = ticket.qrSvg || '';
+            const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
+            const eventDate = formatDate(event.event_date, event.event_time);
+
+            return `
+                <article class="generated-ticket" data-ticket-index="${index}">
+                    <div class="generated-ticket-poster">
+                        <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(event.name || 'Evento')}" class="generated-ticket-image">
+                    </div>
+                    <div class="generated-ticket-content">
+                        <p class="generated-ticket-kicker">Ticketmaster</p>
+                        <h3>${escapeHtml(event.name || 'Evento')}</h3>
+                        <p class="generated-ticket-subtitle">${escapeHtml(eventDate)} | ${escapeHtml(event.location || 'Ubicacion por confirmar')}</p>
+                        <div class="generated-ticket-meta">
+                            <div><span>Tipo</span><strong>${escapeHtml(typeName)}</strong></div>
+                            <div><span>Asiento</span><strong>${escapeHtml(seatNumber)}</strong></div>
+                            <div><span>Precio</span><strong>$${formatMoney(ticketType.price ?? ticket.unitPrice ?? 0)}</strong></div>
+                            <div><span>Estado</span><strong>Confirmado</strong></div>
+                        </div>
+                    </div>
+                    <div class="generated-ticket-qr">
+                        <div class="generated-ticket-qr-box">${qrSvg}</div>
+                        <p>Escanea para validar</p>
+                        <div class="generated-ticket-actions">
+                            <button type="button" data-download-ticket="${index}">Descargar</button>
+                            <button type="button" data-print-ticket="${index}">Imprimir</button>
+                        </div>
+                    </div>
+                </article>
+            `;
+        }
+
+        function renderPurchasedTickets(tickets) {
+            lastPurchasedTickets = Array.isArray(tickets) ? tickets : [];
+            if (!lastPurchasedTickets.length) {
+                purchaseTicketsWrap.classList.add('hidden');
+                purchaseTicketsGrid.innerHTML = '';
+                return;
+            }
+
+            purchaseTicketsWrap.classList.remove('hidden');
+            purchaseTicketsGrid.innerHTML = lastPurchasedTickets.map(buildTicketCardMarkup).join('');
+        }
+
+        function buildStandaloneTicketHtml(ticket) {
+            const event = ticket.event || state.event || {};
+            const ticketType = ticket.ticketType || {};
+            const eventImage = event.image_url || 'https://placehold.co/520x760?text=Evento';
+            const eventDate = formatDate(event.event_date, event.event_time);
+            const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
+            const seatNumber = ticket.seatNumber || 'N/A';
+            const qrSvg = ticket.qrSvg || '';
+
+            return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(event.name || 'Boleto')}</title>
+    <style>
+        body { margin: 0; background: #111318; font-family: Trebuchet MS, Segoe UI, sans-serif; }
+        .ticket-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+        .ticket-card { width: min(1080px, 100%); display: grid; grid-template-columns: 1.1fr 1.8fr 0.9fr; background: #fff; border: 4px solid #7a2df0; box-shadow: 0 24px 60px rgba(0,0,0,.3); overflow: hidden; }
+        .ticket-poster { background: #111; }
+        .ticket-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .ticket-content { padding: 36px; display: grid; align-content: start; gap: 18px; }
+        .ticket-kicker { margin: 0; letter-spacing: .12em; text-transform: uppercase; font-size: 12px; color: #7a2df0; font-weight: 700; }
+        .ticket-title { margin: 0; font-size: clamp(28px, 4vw, 54px); line-height: 1.02; color: #101318; }
+        .ticket-subtitle { margin: 0; color: #5b6270; font-size: 16px; }
+        .ticket-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .ticket-meta div { border: 1px solid #ded7ea; border-radius: 12px; padding: 12px 14px; }
+        .ticket-meta span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #7d8594; margin-bottom: 4px; }
+        .ticket-meta strong { font-size: 16px; color: #101318; }
+        .ticket-qr { display: grid; align-content: end; gap: 14px; padding: 28px; background: #faf9ff; border-left: 1px solid #ebe5f7; }
+        .ticket-qr-box { display: grid; place-items: center; background: #fff; border: 1px solid #e3def0; border-radius: 18px; padding: 12px; }
+        .ticket-qr-box svg { width: 100%; height: auto; display: block; }
+        .ticket-qr p { margin: 0; text-align: center; font-size: 14px; color: #596173; }
+        @media print { body { background: #fff; } .ticket-page { padding: 0; } .ticket-card { box-shadow: none; border-width: 2px; } }
+        @media (max-width: 900px) { .ticket-card { grid-template-columns: 1fr; } .ticket-qr { border-left: 0; border-top: 1px solid #ebe5f7; } }
+    </style>
+</head>
+<body>
+    <div class="ticket-page">
+        <article class="ticket-card">
+            <div class="ticket-poster"><img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(event.name || 'Evento')}"></div>
+            <div class="ticket-content">
+                <p class="ticket-kicker">Ticketmaster</p>
+                <h1 class="ticket-title">${escapeHtml(event.name || 'Evento')}</h1>
+                <p class="ticket-subtitle">${escapeHtml(eventDate)} | ${escapeHtml(event.location || 'Ubicacion por confirmar')}</p>
+                <div class="ticket-meta">
+                    <div><span>Tipo</span><strong>${escapeHtml(typeName)}</strong></div>
+                    <div><span>Asiento</span><strong>${escapeHtml(seatNumber)}</strong></div>
+                    <div><span>Precio</span><strong>$${formatMoney(ticketType.price ?? ticket.unitPrice ?? 0)}</strong></div>
+                    <div><span>Estado</span><strong>Confirmado</strong></div>
+                </div>
+            </div>
+            <div class="ticket-qr">
+                <div class="ticket-qr-box">${qrSvg}</div>
+                <p>Escanea para validar</p>
+            </div>
+        </article>
+    </div>
+</body>
+</html>`;
+        }
+
+        function downloadTicket(ticketIndex) {
+            const ticket = lastPurchasedTickets[ticketIndex];
+            if (!ticket) {
+                return;
+            }
+
+            const blob = new Blob([buildStandaloneTicketHtml(ticket)], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            const eventName = (ticket.event?.name || state.event?.name || 'boleto').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const seat = ticket.seatNumber || '1';
+            anchor.href = url;
+            anchor.download = `boleto-${eventName}-${seat}.html`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function printTicket(ticketIndex) {
+            const ticket = lastPurchasedTickets[ticketIndex];
+            if (!ticket) {
+                return;
+            }
+
+            const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+            if (!printWindow) {
+                notify('El navegador bloqueo la ventana de impresion', 'err');
+                return;
+            }
+
+            printWindow.document.open();
+            printWindow.document.write(buildStandaloneTicketHtml(ticket));
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+            };
+        }
 
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
@@ -170,6 +373,13 @@
             return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
         }
 
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(Number(amount || 0));
+        }
+
         function getTicketTypeById(ticketTypeId) {
             return (state.event?.ticketTypes || []).find((type) => String(type.id) === String(ticketTypeId)) || null;
         }
@@ -214,7 +424,7 @@
             checkoutRows.innerHTML = rows.map((type) => `
                 <div class="checkout-row">
                     <strong>${type.type_name}</strong>
-                    <span>$${Number(type.price).toFixed(2)}</span>
+                    <span>$${formatMoney(type.price)}</span>
                     <span>${Number(type.remaining)}</span>
                     <input type="number" min="1" max="${Number(type.remaining)}" value="1" data-qty="${type.id}">
                     <button class="buy-btn" type="button" data-add="${type.id}">Agregar</button>
@@ -244,18 +454,18 @@
                     <article class="cart-item">
                         <div>
                             <h3>${item.typeName}</h3>
-                            <p class="event-meta">${Number(item.quantity)} x $${Number(item.unitPrice).toFixed(2)}</p>
+                            <p class="event-meta">${Number(item.quantity)} x $${formatMoney(item.unitPrice)}</p>
                         </div>
                         <div class="cart-item-actions">
                             <input class="cart-qty-input" data-cart-qty-id="${item.ticketTypeId}" type="number" min="1" max="${item.maxAvailable}" value="${item.quantity}">
-                            <strong>$${subtotal.toFixed(2)}</strong>
+                            <strong>$${formatMoney(subtotal)}</strong>
                             <button class="image-btn" data-remove="${item.ticketTypeId}" type="button">Quitar</button>
                         </div>
                     </article>
                 `;
             }).join('');
 
-            cartTotal.textContent = `Total: $${total.toFixed(2)}`;
+            cartTotal.textContent = `Total: $${formatMoney(total)}`;
         }
 
         function renderAccess() {
@@ -334,16 +544,31 @@
                 return;
             }
 
+            const purchaseSnapshot = state.cart.map((item) => ({
+                typeName: item.typeName,
+                quantity: Number(item.quantity),
+                unitPrice: Number(item.unitPrice)
+            }));
+
             let success = 0;
             let failed = 0;
+            const purchasedTickets = [];
 
             for (const item of state.cart) {
                 try {
-                    await apiCall('POST', '/tickets/purchase', {
+                    const result = await apiCall('POST', '/tickets/purchase', {
                         ticket_type_id: item.ticketTypeId,
                         quantity: item.quantity,
                     });
-                    success += 1;
+                    success += Number(result.quantity || item.quantity || 0);
+                    if (Array.isArray(result.tickets)) {
+                        purchasedTickets.push(...result.tickets.map((ticket) => ({
+                            ...ticket,
+                            event: result.event || state.event,
+                            ticketType: result.ticketType || null,
+                            unitPrice: result.ticketType?.unit_price ?? item.unitPrice,
+                        })));
+                    }
                 } catch (err) {
                     failed += 1;
                 }
@@ -352,7 +577,22 @@
             state.cart = [];
 
             if (success > 0) {
+                const summaryItems = purchaseSnapshot
+                    .map((item) => {
+                        const subtotal = item.quantity * item.unitPrice;
+                        return `<li><strong>${item.typeName}</strong> - ${item.quantity} x $${formatMoney(item.unitPrice)} = $${formatMoney(subtotal)}</li>`;
+                    })
+                    .join('');
+                const summaryTotal = purchaseSnapshot
+                    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+                const summaryHtml = `
+                    <h3>Resumen de tu compra</h3>
+                    <ul>${summaryItems}</ul>
+                    <p class="purchase-success-total">Total pagado: $${formatMoney(summaryTotal)}</p>
+                `;
                 notify('Compra completada', 'ok');
+                showPurchaseSuccess(`Tu compra fue exitosa. Se procesaron ${success} elemento(s).`, summaryHtml);
+                renderPurchasedTickets(purchasedTickets);
             }
             if (failed > 0) {
                 notify(`No se pudieron comprar ${failed} elementos del carrito`, 'err');
@@ -429,6 +669,24 @@
                 renderCart();
             });
             document.getElementById('checkoutCart').addEventListener('click', checkoutCart);
+            document.getElementById('closePurchaseSuccess').addEventListener('click', () => {
+                hidePurchaseSuccess();
+                window.location.href = '/';
+            });
+
+            purchaseTicketsGrid.addEventListener('click', (event) => {
+                const downloadButton = event.target.closest('[data-download-ticket]');
+                const printButton = event.target.closest('[data-print-ticket]');
+
+                if (downloadButton) {
+                    downloadTicket(downloadButton.getAttribute('data-download-ticket'));
+                    return;
+                }
+
+                if (printButton) {
+                    printTicket(printButton.getAttribute('data-print-ticket'));
+                }
+            });
 
             checkoutRows.addEventListener('click', (event) => {
                 const addButton = event.target.closest('[data-add]');

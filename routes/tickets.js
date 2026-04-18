@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const auth = require('../middleware/auth');
 const { randomBytes } = require('crypto');
+const QRCode = require('qrcode');
 
 const router = express.Router();
 
@@ -29,6 +30,15 @@ router.post('/purchase', auth, async (req, res) => {
     );
     const ticketType = typeResult.rows[0];
     if (!ticketType) throw new Error('Tipo de boleto no existe');
+
+    const eventResult = await client.query(
+      `SELECT id, name, event_date, event_time, location, image_url, description
+       FROM events
+       WHERE id = $1`,
+      [ticketType.event_id]
+    );
+    const event = eventResult.rows[0];
+
     const available = Number(ticketType.capacity) - Number(ticketType.sold);
     if (available < qty) {
       throw new Error(`Solo hay ${available} boletos disponibles para este tipo`);
@@ -40,6 +50,12 @@ router.post('/purchase', auth, async (req, res) => {
     for (let i = 1; i <= qty; i += 1) {
       const seatNumber = (startSold + i).toString();
       const qrCode = randomBytes(16).toString('hex');
+      const qrSvg = await QRCode.toString(qrCode, {
+        type: 'svg',
+        margin: 1,
+        width: 180,
+        errorCorrectionLevel: 'M'
+      });
 
       await client.query(
         `INSERT INTO tickets (ticket_type_id, user_id, qr_code, seat_number)
@@ -47,7 +63,27 @@ router.post('/purchase', auth, async (req, res) => {
         [ticket_type_id, userId, qrCode, seatNumber]
       );
 
-      purchasedTickets.push({ qrCode, seatNumber });
+      purchasedTickets.push({
+        qrCode,
+        qrSvg,
+        seatNumber,
+        event: event
+          ? {
+              id: event.id,
+              name: event.name,
+              event_date: event.event_date,
+              event_time: event.event_time,
+              location: event.location,
+              image_url: event.image_url,
+              description: event.description,
+            }
+          : null,
+        ticketType: {
+          id: ticketType.id,
+          type_name: ticketType.type_name,
+          price: Number(ticketType.price),
+        },
+      });
     }
 
     await client.query(
@@ -68,6 +104,17 @@ router.post('/purchase', auth, async (req, res) => {
         type_name: ticketType.type_name,
         unit_price: unitPrice,
       },
+      event: event
+        ? {
+            id: event.id,
+            name: event.name,
+            event_date: event.event_date,
+            event_time: event.event_time,
+            location: event.location,
+            image_url: event.image_url,
+            description: event.description,
+          }
+        : null,
       total,
       tickets: purchasedTickets,
     });
