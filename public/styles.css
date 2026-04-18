@@ -117,7 +117,7 @@ body {
 }
 
 main {
-    width: min(1100px, calc(100% - 30px));
+    width: min(1280px, calc(100% - 30px));
     margin: 24px auto 70px;
 }
 
@@ -297,8 +297,8 @@ main {
 
 .hero-layout {
     display: grid;
-    grid-template-columns: minmax(360px, 0.95fr) minmax(460px, 1.2fr);
-    gap: 14px;
+    grid-template-columns: minmax(360px, 0.9fr) minmax(620px, 1.3fr);
+    gap: 16px;
     align-items: start;
 }
 
@@ -379,7 +379,8 @@ select {
 
 .manager-stack {
     display: grid;
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+    gap: 12px;
 }
 
 .manager-box,
@@ -509,8 +510,22 @@ select {
 }
 
 .delete-event {
-    background: #6f1f1b;
+    background: #8f231d;
     color: #fff;
+}
+.delete-event:hover {
+    opacity: 0.92;
+}
+.danger-box {
+    grid-column: 1 / -1;
+    border-color: #e3b6b0;
+    background: #fff4f2;
+}
+.danger-box h3 {
+    color: #7d2018;
+}
+.danger-box .helper {
+    color: #8a3e36;
 }
 
 .buy-btn {
@@ -774,6 +789,10 @@ select {
 
 @media (max-width: 880px) {
     .hero-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .manager-stack {
         grid-template-columns: 1fr;
     }
 
