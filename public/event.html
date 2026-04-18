@@ -27,7 +27,10 @@
             </div>
             <div class="event-content-column">
                 <div class="preview-info">
-                    <h1 id="eventName" class="title"></h1>
+                    <div class="event-heading-row">
+                        <h1 id="eventName" class="title"></h1>
+                        <button id="quickEditEvent" class="quick-edit-btn hidden" type="button">Editar evento</button>
+                    </div>
                     <p id="eventMeta" class="meta"></p>
                     <p id="eventDescription" class="meta"></p>
                 </div>
@@ -36,9 +39,12 @@
                     <div class="section-title-row">
                         <div>
                             <h2>Tipos de boleto</h2>
-                            <p class="ticket-summary">Todo queda en un solo cuadro para comparar precio, capacidad y disponibilidad sin perder tiempo.</p>
+                            <p class="ticket-summary">Administra y compara precio, capacidad y disponibilidad en el mismo bloque.</p>
                         </div>
-                        <div id="ticketCountPill" class="session-pill">0 tipos</div>
+                        <div class="section-title-actions">
+                            <button id="openTicketCreatorInline" class="image-btn hidden" type="button">Crear boleto</button>
+                            <div id="ticketCountPill" class="session-pill">0 tipos</div>
+                        </div>
                     </div>
                     <div class="ticket-board">
                         <div id="ticketTypesBody" class="ticket-list"></div>
@@ -47,30 +53,17 @@
                 </section>
 
                 <div id="editPanel" class="edit-subpanel hidden">
-                    <h2>Panel de organizador</h2>
-                    <div class="manager-stack">
-                        <div class="manager-box">
-                            <h3>Caracteristicas generales</h3>
-                            <p class="helper">Edita fecha, lugar, capacidad, artista y descripcion desde una ventana dedicada.</p>
-                            <div class="actions">
-                                <button id="openEventEditor" type="button">Editar evento</button>
-                            </div>
-                        </div>
+                    <div class="manager-box">
+                        <h3>Resumen del evento</h3>
+                        <p id="organizerCapacity" class="helper">Capacidad del evento: 0</p>
+                        <p id="organizerCapacityUsage" class="helper">Capacidad en boletos: 0</p>
+                    </div>
 
-                        <div class="manager-box">
-                            <h3>Boletos</h3>
-                            <p class="helper">Agrega boletos con el boton Crear boleto y usa Editar en cada tarjeta para ajustarlos.</p>
-                            <div class="actions">
-                                <button id="openTicketCreator" type="button">Crear boleto</button>
-                            </div>
-                        </div>
-
-                        <div class="manager-box danger-box">
-                            <h3>Zona de peligro</h3>
-                            <p class="helper">Eliminaras el evento completo junto con sus tipos de boleto y boletos vendidos.</p>
-                            <div class="actions">
-                                <button id="deleteEvent" type="button" class="delete-event">Eliminar evento completo</button>
-                            </div>
+                    <div class="manager-box danger-box">
+                        <h3>Zona de peligro</h3>
+                        <p class="helper">Eliminaras el evento completo junto con sus tipos de boleto y boletos vendidos.</p>
+                        <div class="actions">
+                            <button id="deleteEvent" type="button" class="delete-event">Eliminar evento completo</button>
                         </div>
                     </div>
                 </div>
@@ -87,14 +80,38 @@
                 <button id="closeEventEditor" class="event-modal-close" type="button" aria-label="Cerrar">X</button>
             </div>
             <div class="grid">
-                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
-                <input id="editLocation" class="full" type="text" placeholder="Lugar">
-                <input id="editDate" type="date">
-                <input id="editTime" type="time">
-                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
-                <input id="editArtist" type="text" placeholder="Artista">
-                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
-                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
+                <div class="lock-field full">
+                    <input id="editName" type="text" placeholder="Nombre del evento">
+                    <button type="button" class="lock-toggle" data-lock-target="editName">Desbloquear</button>
+                </div>
+                <div class="lock-field full">
+                    <input id="editLocation" type="text" placeholder="Lugar">
+                    <button type="button" class="lock-toggle" data-lock-target="editLocation">Desbloquear</button>
+                </div>
+                <div class="lock-field">
+                    <input id="editDate" type="date">
+                    <button type="button" class="lock-toggle" data-lock-target="editDate">Desbloquear</button>
+                </div>
+                <div class="lock-field">
+                    <input id="editTime" type="time">
+                    <button type="button" class="lock-toggle" data-lock-target="editTime">Desbloquear</button>
+                </div>
+                <div class="lock-field">
+                    <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
+                    <button type="button" class="lock-toggle" data-lock-target="editCapacity">Desbloquear</button>
+                </div>
+                <div class="lock-field">
+                    <input id="editArtist" type="text" placeholder="Artista">
+                    <button type="button" class="lock-toggle" data-lock-target="editArtist">Desbloquear</button>
+                </div>
+                <div class="lock-field">
+                    <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
+                    <button type="button" class="lock-toggle" data-lock-target="editFee">Desbloquear</button>
+                </div>
+                <div class="lock-field full">
+                    <textarea id="editDescription" rows="3" placeholder="Descripcion"></textarea>
+                    <button type="button" class="lock-toggle" data-lock-target="editDescription">Desbloquear</button>
+                </div>
             </div>
             <div class="actions">
                 <button id="saveEvent" type="button">Guardar cambios</button>
@@ -140,10 +157,22 @@
         const editPanel = document.getElementById('editPanel');
         const imagePicker = document.getElementById('imagePicker');
         const imageQuickAction = document.getElementById('imageQuickAction');
+        const quickEditEvent = document.getElementById('quickEditEvent');
+        const openTicketCreatorInline = document.getElementById('openTicketCreatorInline');
         const ticketCountPill = document.getElementById('ticketCountPill');
         const ticketEmptyState = document.getElementById('ticketEmptyState');
         const eventEditorModal = document.getElementById('eventEditorModal');
         const ticketEditorModal = document.getElementById('ticketEditorModal');
+        const eventFieldIds = [
+            'editName',
+            'editLocation',
+            'editDate',
+            'editTime',
+            'editCapacity',
+            'editArtist',
+            'editFee',
+            'editDescription'
+        ];
 
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
@@ -236,8 +265,11 @@
             const body = document.getElementById('ticketTypesBody');
             const editable = canEditEvent(event);
             const ticketTypes = event.ticketTypes || [];
+            const totalTicketCapacity = ticketTypes.reduce((sum, type) => sum + Number(type.capacity || 0), 0);
             ticketCountPill.textContent = `${ticketTypes.length} tipo${ticketTypes.length === 1 ? '' : 's'}`;
             ticketEmptyState.classList.toggle('hidden', ticketTypes.length !== 0);
+            document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
+            document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
 
             const cards = ticketTypes.map((type) => {
                 const available = Number(type.capacity) - Number(type.sold || 0);
@@ -262,6 +294,8 @@
 
             editPanel.classList.toggle('hidden', !editable);
             imageQuickAction.classList.toggle('hidden', !editable);
+            quickEditEvent.classList.toggle('hidden', !editable);
+            openTicketCreatorInline.classList.toggle('hidden', !editable);
             if (editable) {
                 fillEditForm(event);
             }
@@ -324,6 +358,7 @@
 
         function openEventEditorModal() {
             fillEditForm(state.event);
+            resetEventFieldLocks();
             eventEditorModal.classList.add('open');
             eventEditorModal.setAttribute('aria-hidden', 'false');
         }
@@ -331,6 +366,22 @@
         function closeEventEditorModal() {
             eventEditorModal.classList.remove('open');
             eventEditorModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function setFieldLocked(fieldId, locked) {
+            const field = document.getElementById(fieldId);
+            const toggle = eventEditorModal.querySelector(`[data-lock-target="${fieldId}"]`);
+            if (!field || !toggle) {
+                return;
+            }
+
+            field.disabled = locked;
+            toggle.textContent = locked ? 'Desbloquear' : 'Bloquear';
+            toggle.classList.toggle('is-unlocked', !locked);
+        }
+
+        function resetEventFieldLocks() {
+            eventFieldIds.forEach((fieldId) => setFieldLocked(fieldId, true));
         }
 
         function openTicketEditorModal() {
@@ -512,9 +563,9 @@
             window.location.href = '/';
         });
 
-        document.getElementById('openEventEditor').addEventListener('click', openEventEditorModal);
+        quickEditEvent.addEventListener('click', openEventEditorModal);
         document.getElementById('closeEventEditor').addEventListener('click', closeEventEditorModal);
-        document.getElementById('openTicketCreator').addEventListener('click', openTicketCreatorModal);
+        openTicketCreatorInline.addEventListener('click', openTicketCreatorModal);
         document.getElementById('closeTicketEditor').addEventListener('click', closeTicketEditorModal);
         document.getElementById('saveEvent').addEventListener('click', saveEvent);
         imageQuickAction.addEventListener('click', () => imagePicker.click());
@@ -527,6 +578,21 @@
             if (event.target === eventEditorModal) {
                 closeEventEditorModal();
             }
+        });
+
+        eventEditorModal.addEventListener('click', (event) => {
+            const lockButton = event.target.closest('[data-lock-target]');
+            if (!lockButton) {
+                return;
+            }
+
+            const fieldId = lockButton.dataset.lockTarget;
+            const targetField = document.getElementById(fieldId);
+            if (!targetField) {
+                return;
+            }
+
+            setFieldLocked(fieldId, !targetField.disabled);
         });
 
         ticketEditorModal.addEventListener('click', (event) => {
