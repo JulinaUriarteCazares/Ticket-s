@@ -20,7 +20,10 @@
     <main>
         <section class="panel hero-layout">
             <div class="event-media-column">
-                <img id="eventImage" class="hero-image" alt="Imagen del evento">
+                <div class="event-image-wrap">
+                    <img id="eventImage" class="hero-image" alt="Imagen del evento">
+                    <button id="imageQuickAction" class="image-corner-plus hidden" type="button" aria-label="Agregar o cambiar imagen">+</button>
+                </div>
             </div>
             <div class="event-content-column">
                 <div class="preview-info">
@@ -47,41 +50,18 @@
                     <h2>Panel de organizador</h2>
                     <div class="manager-stack">
                         <div class="manager-box">
-                            <h3>Editar datos del evento</h3>
-                            <div class="grid">
-                                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
-                                <input id="editLocation" class="full" type="text" placeholder="Lugar">
-                                <input id="editDate" type="date">
-                                <input id="editTime" type="time">
-                                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
-                                <input id="editArtist" type="text" placeholder="Artista">
-                                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
-                                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
-                            </div>
-
+                            <h3>Caracteristicas generales</h3>
+                            <p class="helper">Edita fecha, lugar, capacidad, artista y descripcion desde una ventana dedicada.</p>
                             <div class="actions">
-                                <button id="saveEvent" type="button">Guardar cambios</button>
-                                <button id="pickImage" type="button">Cambiar imagen</button>
+                                <button id="openEventEditor" type="button">Editar evento</button>
                             </div>
-                            <input id="imagePicker" class="hidden" type="file" accept="image/*">
                         </div>
 
                         <div class="manager-box">
-                            <h3>Crear o editar tipo de boleto</h3>
-                            <p class="helper">Categorias disponibles: General/Normal, Numerado, VIP y Platino.</p>
-                            <div class="grid">
-                                <select id="newTicketTypeName">
-                                    <option value="General/Normal">General/Normal</option>
-                                    <option value="Numerado">Numerado</option>
-                                    <option value="VIP">VIP</option>
-                                    <option value="Platino">Platino</option>
-                                </select>
-                                <input id="newTicketPrice" type="number" min="0" step="0.01" placeholder="Precio">
-                                <input id="newTicketCapacity" type="number" min="1" placeholder="Capacidad">
-                            </div>
+                            <h3>Boletos</h3>
+                            <p class="helper">Agrega boletos con el boton Crear boleto y usa Editar en cada tarjeta para ajustarlos.</p>
                             <div class="actions">
-                                <button id="createTicketType" type="button">Crear boleto</button>
-                                <button id="clearTicketTypeForm" type="button">Limpiar</button>
+                                <button id="openTicketCreator" type="button">Crear boleto</button>
                             </div>
                         </div>
 
@@ -94,9 +74,57 @@
                         </div>
                     </div>
                 </div>
+
+                <input id="imagePicker" class="hidden" type="file" accept="image/*">
             </div>
         </section>
     </main>
+
+    <div id="eventEditorModal" class="event-modal" aria-hidden="true">
+        <div class="event-modal-panel" role="dialog" aria-modal="true" aria-label="Editar evento">
+            <div class="event-modal-head">
+                <h3>Editar evento</h3>
+                <button id="closeEventEditor" class="event-modal-close" type="button" aria-label="Cerrar">X</button>
+            </div>
+            <div class="grid">
+                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
+                <input id="editLocation" class="full" type="text" placeholder="Lugar">
+                <input id="editDate" type="date">
+                <input id="editTime" type="time">
+                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
+                <input id="editArtist" type="text" placeholder="Artista">
+                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
+                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
+            </div>
+            <div class="actions">
+                <button id="saveEvent" type="button">Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ticketEditorModal" class="event-modal" aria-hidden="true">
+        <div class="event-modal-panel" role="dialog" aria-modal="true" aria-label="Editar boleto">
+            <div class="event-modal-head">
+                <h3 id="ticketEditorTitle">Crear boleto</h3>
+                <button id="closeTicketEditor" class="event-modal-close" type="button" aria-label="Cerrar">X</button>
+            </div>
+            <p class="helper">Categorias disponibles: General/Normal, Numerado, VIP y Platino.</p>
+            <div class="grid">
+                <select id="newTicketTypeName">
+                    <option value="General/Normal">General/Normal</option>
+                    <option value="Numerado">Numerado</option>
+                    <option value="VIP">VIP</option>
+                    <option value="Platino">Platino</option>
+                </select>
+                <input id="newTicketPrice" type="number" min="0" step="0.01" placeholder="Precio">
+                <input id="newTicketCapacity" type="number" min="1" placeholder="Capacidad">
+            </div>
+            <div class="actions">
+                <button id="createTicketType" type="button">Guardar boleto</button>
+                <button id="clearTicketTypeForm" type="button">Limpiar</button>
+            </div>
+        </div>
+    </div>
 
     <div id="toastRoot" class="toasts"></div>
 
@@ -111,8 +139,11 @@
 
         const editPanel = document.getElementById('editPanel');
         const imagePicker = document.getElementById('imagePicker');
+        const imageQuickAction = document.getElementById('imageQuickAction');
         const ticketCountPill = document.getElementById('ticketCountPill');
         const ticketEmptyState = document.getElementById('ticketEmptyState');
+        const eventEditorModal = document.getElementById('eventEditorModal');
+        const ticketEditorModal = document.getElementById('ticketEditorModal');
 
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
@@ -230,6 +261,7 @@
             body.innerHTML = cards;
 
             editPanel.classList.toggle('hidden', !editable);
+            imageQuickAction.classList.toggle('hidden', !editable);
             if (editable) {
                 fillEditForm(event);
             }
@@ -271,7 +303,8 @@
             document.getElementById('newTicketTypeName').value = 'General/Normal';
             document.getElementById('newTicketPrice').value = '';
             document.getElementById('newTicketCapacity').value = '';
-            document.getElementById('createTicketType').textContent = 'Crear boleto';
+            document.getElementById('ticketEditorTitle').textContent = 'Crear boleto';
+            document.getElementById('createTicketType').textContent = 'Guardar boleto';
         }
 
         function startEditTicketType(ticketTypeId) {
@@ -284,7 +317,36 @@
             document.getElementById('newTicketTypeName').value = ticketType.type_name;
             document.getElementById('newTicketPrice').value = Number(ticketType.price);
             document.getElementById('newTicketCapacity').value = Number(ticketType.capacity);
+            document.getElementById('ticketEditorTitle').textContent = 'Editar boleto';
             document.getElementById('createTicketType').textContent = 'Actualizar boleto';
+            openTicketEditorModal();
+        }
+
+        function openEventEditorModal() {
+            fillEditForm(state.event);
+            eventEditorModal.classList.add('open');
+            eventEditorModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeEventEditorModal() {
+            eventEditorModal.classList.remove('open');
+            eventEditorModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function openTicketEditorModal() {
+            ticketEditorModal.classList.add('open');
+            ticketEditorModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeTicketEditorModal() {
+            ticketEditorModal.classList.remove('open');
+            ticketEditorModal.setAttribute('aria-hidden', 'true');
+            clearTicketTypeForm();
+        }
+
+        function openTicketCreatorModal() {
+            clearTicketTypeForm();
+            openTicketEditorModal();
         }
 
         async function loadEvent() {
@@ -315,6 +377,7 @@
                 await apiCall('PUT', `/events/${state.eventId}`, payload);
                 notify('Evento actualizado', 'ok');
                 await loadEvent();
+                closeEventEditorModal();
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -343,6 +406,7 @@
 
                 clearTicketTypeForm();
                 await loadEvent();
+                closeTicketEditorModal();
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -448,12 +512,28 @@
             window.location.href = '/';
         });
 
+        document.getElementById('openEventEditor').addEventListener('click', openEventEditorModal);
+        document.getElementById('closeEventEditor').addEventListener('click', closeEventEditorModal);
+        document.getElementById('openTicketCreator').addEventListener('click', openTicketCreatorModal);
+        document.getElementById('closeTicketEditor').addEventListener('click', closeTicketEditorModal);
         document.getElementById('saveEvent').addEventListener('click', saveEvent);
-        document.getElementById('pickImage').addEventListener('click', () => imagePicker.click());
+        imageQuickAction.addEventListener('click', () => imagePicker.click());
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
         imagePicker.addEventListener('change', handleImageSelection);
         document.getElementById('createTicketType').addEventListener('click', createTicketType);
         document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);
+
+        eventEditorModal.addEventListener('click', (event) => {
+            if (event.target === eventEditorModal) {
+                closeEventEditorModal();
+            }
+        });
+
+        ticketEditorModal.addEventListener('click', (event) => {
+            if (event.target === ticketEditorModal) {
+                closeTicketEditorModal();
+            }
+        });
 
         document.getElementById('ticketTypesBody').addEventListener('click', (event) => {
             const editButton = event.target.closest('[data-edit-ticket-type]');

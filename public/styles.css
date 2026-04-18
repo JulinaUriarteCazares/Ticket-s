@@ -311,6 +311,11 @@ main {
     display: grid;
 }
 
+.event-image-wrap {
+    position: relative;
+    display: grid;
+}
+
 .preview-info {
     display: grid;
     gap: 8px;
@@ -329,6 +334,26 @@ main {
     border-radius: 10px;
     border: 1px solid #e4dcca;
     background: #efe7d7;
+}
+
+.image-corner-plus {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid #d7ccbb;
+    background: #fffaf0;
+    color: #232834;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
+}
+
+.image-corner-plus:hover {
+    background: #f1e7d5;
 }
 
 .title {
@@ -400,6 +425,10 @@ select {
     font-size: 18px;
 }
 
+.manager-box .actions {
+    margin-top: 2px;
+}
+
 .helper,
 .ticket-summary,
 .ticket-empty {
@@ -419,6 +448,54 @@ select {
 .edit-subpanel h2 {
     margin: 0 0 10px;
     font-size: 20px;
+}
+
+.event-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: none;
+    place-items: center;
+    background: rgba(17, 19, 24, 0.56);
+    padding: 16px;
+}
+
+.event-modal.open {
+    display: grid;
+}
+
+.event-modal-panel {
+    width: min(760px, 100%);
+    background: #fffdf8;
+    border-radius: 14px;
+    border: 1px solid #dfd5c3;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.26);
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+}
+
+.event-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.event-modal-head h3 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.event-modal-close {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #cabfae;
+    background: #f8f1e3;
+    border-radius: 10px;
+    color: #252b36;
+    cursor: pointer;
+    font-size: 16px;
 }
 
 .ticket-board {
