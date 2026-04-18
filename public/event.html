@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle de Evento</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/event.css">
 </head>
 <body>
     <header class="topbar">
@@ -39,7 +39,7 @@
                     <div class="section-title-row">
                         <div>
                             <h2>Tipos de boleto</h2>
-                            <p class="ticket-summary">Administra y compara precio, capacidad y disponibilidad en el mismo bloque.</p>
+                            <p id="ticketSummaryCopy" class="ticket-summary">Administra y compara precio, capacidad y disponibilidad en el mismo bloque.</p>
                         </div>
                         <div class="section-title-actions">
                             <button id="openTicketCreatorInline" class="image-btn hidden" type="button">Crear boleto</button>
@@ -51,6 +51,44 @@
                         <div id="ticketEmptyState" class="ticket-empty hidden">No hay tipos de boleto configurados</div>
                     </div>
                 </section>
+
+                <section id="ticketCheckoutSection" class="panel ticket-checkout hidden">
+                    <div class="section-title-row">
+                        <div>
+                            <h2>Conseguir boletos</h2>
+                            <p class="ticket-summary">Selecciona el tipo, cantidad y agrega al carrito.</p>
+                        </div>
+                    </div>
+                    <div class="checkout-head">
+                        <span>Tipo</span>
+                        <span>Precio</span>
+                        <span>Disponibles</span>
+                        <span>Cantidad</span>
+                        <span>Accion</span>
+                    </div>
+                    <div id="ticketCheckoutRows" class="checkout-rows"></div>
+                </section>
+
+                <section id="eventCartPanel" class="panel ticket-panel hidden">
+                    <div class="section-title-row">
+                        <div>
+                            <h2>Carrito de este evento</h2>
+                            <p class="ticket-summary">Selecciona boletos, agrégalos al carrito y compra en un solo paso.</p>
+                        </div>
+                        <div class="section-title-actions">
+                            <button id="clearEventCart" class="image-btn" type="button">Vaciar</button>
+                        </div>
+                    </div>
+                    <div id="eventCartItems" class="cart-list"></div>
+                    <div class="cart-footer">
+                        <strong id="eventCartTotal">Total: $0.00</strong>
+                        <button id="checkoutEventCart" class="buy-btn" type="button">Comprar carrito</button>
+                    </div>
+                </section>
+
+                <div class="event-bottom-cta">
+                    <button id="goToCheckout" class="get-tickets-btn hidden" type="button">Conseguir boletos</button>
+                </div>
 
                 <div id="editPanel" class="edit-subpanel hidden">
                     <div class="manager-box">
@@ -151,6 +189,8 @@
             user: null,
             eventId: null,
             event: null,
+            cart: [],
+            checkoutOpen: false,
             editingTicketTypeId: null
         };
 
@@ -158,11 +198,18 @@
         const imagePicker = document.getElementById('imagePicker');
         const imageQuickAction = document.getElementById('imageQuickAction');
         const quickEditEvent = document.getElementById('quickEditEvent');
+        const goToCheckout = document.getElementById('goToCheckout');
         const openTicketCreatorInline = document.getElementById('openTicketCreatorInline');
         const ticketCountPill = document.getElementById('ticketCountPill');
         const ticketEmptyState = document.getElementById('ticketEmptyState');
+        const ticketSummaryCopy = document.getElementById('ticketSummaryCopy');
         const eventEditorModal = document.getElementById('eventEditorModal');
         const ticketEditorModal = document.getElementById('ticketEditorModal');
+        const ticketCheckoutSection = document.getElementById('ticketCheckoutSection');
+        const ticketCheckoutRows = document.getElementById('ticketCheckoutRows');
+        const eventCartPanel = document.getElementById('eventCartPanel');
+        const eventCartItems = document.getElementById('eventCartItems');
+        const eventCartTotal = document.getElementById('eventCartTotal');
         const eventFieldIds = [
             'editName',
             'editLocation',
@@ -207,6 +254,14 @@
             }
 
             return state.user.role === 'organizer' || String(state.user.id) === String(event.organizer_id);
+        }
+
+        function isRegularUser() {
+            return state.user && state.user.role === 'user';
+        }
+
+        function isViewer(event) {
+            return !canEditEvent(event);
         }
 
         async function apiCall(method, url, body = null) {
@@ -264,23 +319,42 @@
 
             const body = document.getElementById('ticketTypesBody');
             const editable = canEditEvent(event);
+            const canBuy = isRegularUser();
+            const viewer = isViewer(event);
             const ticketTypes = event.ticketTypes || [];
             const totalTicketCapacity = ticketTypes.reduce((sum, type) => sum + Number(type.capacity || 0), 0);
-            ticketCountPill.textContent = `${ticketTypes.length} tipo${ticketTypes.length === 1 ? '' : 's'}`;
-            ticketEmptyState.classList.toggle('hidden', ticketTypes.length !== 0);
+            const ticketRows = ticketTypes.map((type) => {
+                const available = Number(type.capacity) - Number(type.sold || 0);
+                const reserved = canBuy ? getCartReservedQty(type.id) : 0;
+                const remaining = Math.max(available - reserved, 0);
+                return {
+                    ...type,
+                    available,
+                    remaining,
+                };
+            });
+            const visibleRows = viewer
+                ? ticketRows.filter((type) => type.remaining > 0)
+                : ticketRows;
+            const totalVisibleAvailable = visibleRows.reduce((sum, type) => sum + Number(type.remaining || 0), 0);
+
+            ticketCountPill.textContent = `${visibleRows.length} tipo${visibleRows.length === 1 ? '' : 's'}`;
+            ticketEmptyState.classList.toggle('hidden', visibleRows.length !== 0);
             document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
             document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
+            if (viewer) {
+                ticketSummaryCopy.textContent = `Disponibles en total: ${totalVisibleAvailable} boletos.`;
+            } else {
+                ticketSummaryCopy.textContent = 'Administra y compara precio, capacidad y disponibilidad en el mismo bloque.';
+            }
 
-            const cards = ticketTypes.map((type) => {
-                const available = Number(type.capacity) - Number(type.sold || 0);
+            const cards = visibleRows.map((type) => {
                 return `<article class="ticket-card">
                     <span class="ticket-badge">${type.type_name}</span>
                     <h3>$${Number(type.price).toFixed(2)}</h3>
-                    <div class="ticket-stats">
-                        <div class="ticket-stat"><span>Disponibles</span><strong>${available}</strong></div>
-                        <div class="ticket-stat"><span>Capacidad</span><strong>${Number(type.capacity)}</strong></div>
+                    <div class="ticket-stats ${viewer ? 'ticket-stats-simple' : ''}">
+                        <div class="ticket-stat"><span>Quedan</span><strong>${Number(type.remaining)}</strong></div>
                     </div>
-                    <div class="ticket-stat"><span>Vendidos</span><strong>${Number(type.sold || 0)}</strong></div>
                     ${editable ? `
                         <div class="actions">
                             <button type="button" data-edit-ticket-type="${type.id}">Editar</button>
@@ -291,14 +365,177 @@
             }).join('');
 
             body.innerHTML = cards;
+            ticketCheckoutRows.innerHTML = viewer
+                ? visibleRows.map((type) => `
+                    <div class="checkout-row">
+                        <strong>${type.type_name}</strong>
+                        <span>$${Number(type.price).toFixed(2)}</span>
+                        <span>${Number(type.remaining)}</span>
+                        <input type="number" min="1" max="${Number(type.remaining)}" value="1" data-checkout-qty="${type.id}">
+                        ${canBuy
+                            ? `<button class="buy-btn" type="button" data-checkout-add-ticket="${type.id}">Agregar</button>`
+                            : '<button class="buy-btn" type="button" data-checkout-login>Iniciar sesion</button>'
+                        }
+                    </div>
+                `).join('')
+                : '';
 
             editPanel.classList.toggle('hidden', !editable);
             imageQuickAction.classList.toggle('hidden', !editable);
             quickEditEvent.classList.toggle('hidden', !editable);
             openTicketCreatorInline.classList.toggle('hidden', !editable);
+            goToCheckout.classList.toggle('hidden', !viewer || visibleRows.length === 0);
+            ticketCheckoutSection.classList.toggle('hidden', !viewer || !state.checkoutOpen || visibleRows.length === 0);
+            eventCartPanel.classList.toggle('hidden', !canBuy || !state.checkoutOpen);
             if (editable) {
                 fillEditForm(event);
             }
+
+            renderEventCart();
+        }
+
+        function getTicketTypeById(ticketTypeId) {
+            return (state.event?.ticketTypes || []).find((type) => String(type.id) === String(ticketTypeId)) || null;
+        }
+
+        function getCartReservedQty(ticketTypeId) {
+            return state.cart
+                .filter((item) => String(item.ticketTypeId) === String(ticketTypeId))
+                .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        }
+
+        function renderEventCart() {
+            if (!isRegularUser()) {
+                return;
+            }
+
+            if (!state.cart.length) {
+                eventCartItems.innerHTML = '<div class="empty">No has agregado boletos al carrito.</div>';
+                eventCartTotal.textContent = 'Total: $0.00';
+                return;
+            }
+
+            let total = 0;
+            eventCartItems.innerHTML = state.cart.map((item) => {
+                const subtotal = Number(item.unitPrice) * Number(item.quantity);
+                total += subtotal;
+
+                return `
+                    <article class="cart-item" data-cart-item-id="${item.ticketTypeId}">
+                        <div>
+                            <h3>${item.typeName}</h3>
+                            <p class="event-meta">${Number(item.quantity)} x $${Number(item.unitPrice).toFixed(2)}</p>
+                        </div>
+                        <div class="cart-item-actions">
+                            <input class="cart-qty-input" data-cart-qty-id="${item.ticketTypeId}" type="number" min="1" max="${item.maxAvailable}" value="${item.quantity}">
+                            <strong>$${subtotal.toFixed(2)}</strong>
+                            <button class="image-btn" data-cart-remove-id="${item.ticketTypeId}" type="button">Quitar</button>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+
+            eventCartTotal.textContent = `Total: $${total.toFixed(2)}`;
+        }
+
+        function addTicketToEventCart(ticketTypeId, qty) {
+            if (!isRegularUser()) {
+                notify('Solo usuarios normales pueden comprar boletos', 'err');
+                return;
+            }
+
+            const ticketType = getTicketTypeById(ticketTypeId);
+            if (!ticketType) {
+                notify('Tipo de boleto no encontrado', 'err');
+                return;
+            }
+
+            const available = Number(ticketType.capacity) - Number(ticketType.sold || 0);
+            const reserved = getCartReservedQty(ticketTypeId);
+            const realAvailable = available - reserved;
+            if (realAvailable < qty) {
+                notify(`Solo hay ${Math.max(realAvailable, 0)} boletos disponibles para ${ticketType.type_name}`, 'err');
+                return;
+            }
+
+            const existing = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId));
+            if (existing) {
+                existing.quantity += qty;
+                existing.maxAvailable = available;
+            } else {
+                state.cart.push({
+                    ticketTypeId: ticketType.id,
+                    typeName: ticketType.type_name,
+                    unitPrice: Number(ticketType.price),
+                    quantity: qty,
+                    maxAvailable: available,
+                });
+            }
+
+            notify('Boleto agregado al carrito', 'ok');
+            renderEventCart();
+            renderEvent();
+        }
+
+        function removeEventCartItem(ticketTypeId) {
+            state.cart = state.cart.filter((item) => String(item.ticketTypeId) !== String(ticketTypeId));
+            renderEventCart();
+            renderEvent();
+        }
+
+        function updateEventCartItemQuantity(ticketTypeId, value) {
+            const item = state.cart.find((cartItem) => String(cartItem.ticketTypeId) === String(ticketTypeId));
+            if (!item) {
+                return;
+            }
+
+            const qty = Number(value);
+            if (!Number.isInteger(qty) || qty < 1) {
+                item.quantity = 1;
+            } else {
+                item.quantity = Math.min(qty, Number(item.maxAvailable || qty));
+            }
+
+            renderEventCart();
+            renderEvent();
+        }
+
+        async function checkoutEventCart() {
+            if (!isRegularUser()) {
+                notify('Solo usuarios normales pueden comprar desde carrito', 'err');
+                return;
+            }
+
+            if (!state.cart.length) {
+                notify('El carrito esta vacio', 'err');
+                return;
+            }
+
+            let success = 0;
+            let failed = 0;
+
+            for (const item of state.cart) {
+                try {
+                    await apiCall('POST', '/tickets/purchase', {
+                        ticket_type_id: item.ticketTypeId,
+                        quantity: item.quantity,
+                    });
+                    success += 1;
+                } catch (err) {
+                    failed += 1;
+                }
+            }
+
+            state.cart = [];
+
+            if (success > 0) {
+                notify('Compra completada', 'ok');
+            }
+            if (failed > 0) {
+                notify(`No se pudieron comprar ${failed} items del carrito`, 'err');
+            }
+
+            await loadEvent();
         }
 
         async function deleteEvent() {
@@ -540,6 +777,12 @@
             if (!state.user && state.token) {
                 state.user = parseUserFromToken(state.token);
             }
+
+            if (!isRegularUser()) {
+                state.cart = [];
+            }
+
+            state.checkoutOpen = false;
         }
 
         async function init() {
@@ -571,8 +814,19 @@
         imageQuickAction.addEventListener('click', () => imagePicker.click());
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
         imagePicker.addEventListener('change', handleImageSelection);
+        goToCheckout.addEventListener('click', () => {
+            state.checkoutOpen = true;
+            renderEvent();
+            ticketCheckoutSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
         document.getElementById('createTicketType').addEventListener('click', createTicketType);
         document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);
+        document.getElementById('clearEventCart').addEventListener('click', () => {
+            state.cart = [];
+            renderEventCart();
+            renderEvent();
+        });
+        document.getElementById('checkoutEventCart').addEventListener('click', checkoutEventCart);
 
         eventEditorModal.addEventListener('click', (event) => {
             if (event.target === eventEditorModal) {
@@ -612,6 +866,43 @@
             if (deleteButton) {
                 deleteTicketType(deleteButton.dataset.deleteTicketType);
             }
+        });
+
+        ticketCheckoutRows.addEventListener('click', (event) => {
+            const loginButton = event.target.closest('[data-checkout-login]');
+            if (loginButton) {
+                notify('Inicia sesion como usuario para comprar boletos', 'info');
+                window.location.href = '/';
+                return;
+            }
+
+            const addButton = event.target.closest('[data-checkout-add-ticket]');
+            if (!addButton) {
+                return;
+            }
+
+            const ticketTypeId = addButton.dataset.checkoutAddTicket;
+            const qtyInput = ticketCheckoutRows.querySelector(`[data-checkout-qty="${ticketTypeId}"]`);
+            const qty = Number(qtyInput?.value || 1);
+            addTicketToEventCart(ticketTypeId, Number.isInteger(qty) && qty > 0 ? qty : 1);
+        });
+
+        eventCartItems.addEventListener('click', (event) => {
+            const removeButton = event.target.closest('[data-cart-remove-id]');
+            if (!removeButton) {
+                return;
+            }
+
+            removeEventCartItem(removeButton.dataset.cartRemoveId);
+        });
+
+        eventCartItems.addEventListener('change', (event) => {
+            const qtyInput = event.target.closest('[data-cart-qty-id]');
+            if (!qtyInput) {
+                return;
+            }
+
+            updateEventCartItemQuantity(qtyInput.dataset.cartQtyId, qtyInput.value);
         });
 
         init();

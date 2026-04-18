@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ticketmaster Clone</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <header class="topbar">
@@ -27,8 +27,7 @@
             <div class="hero-kicker">Ticketmaster Clone</div>
             <h1 id="heroTitle">Compra boletos en segundos</h1>
             <p id="heroCopy">
-                Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso.
-                Si no tienes sesion, la compra se bloquea hasta que inicies sesion.
+                Revisa todos los eventos disponibles y entra al detalle para conseguir tus boletos.
             </p>
         </section>
 
@@ -118,16 +117,8 @@
             return state.user && (state.user.role === 'organizer' || state.user.role === 'admin');
         }
 
-        function canEditEventImage(event) {
-            if (!state.user) {
-                return false;
-            }
-
-            if (state.user.role === 'admin') {
-                return true;
-            }
-
-            return state.user.role === 'organizer';
+        function isRegularUser() {
+            return state.user && state.user.role === 'user';
         }
 
         function parseUserFromToken(token) {
@@ -169,7 +160,7 @@
                 } else {
                     document.getElementById('heroBanner').classList.remove('hero-organizer');
                     document.getElementById('heroTitle').textContent = 'Compra boletos en segundos';
-                    document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso. Si no tienes sesion, la compra se bloquea hasta que inicies sesion.';
+                    document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles y entra al detalle para conseguir tus boletos.';
                 }
             } else {
                 sessionLabel.textContent = 'Sin sesion activa';
@@ -179,7 +170,7 @@
                 logoutTopButton.classList.add('hidden');
                 document.getElementById('heroBanner').classList.remove('hero-organizer');
                 document.getElementById('heroTitle').textContent = 'Compra boletos en segundos';
-                document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso. Si no tienes sesion, la compra se bloquea hasta que inicies sesion.';
+                document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles y entra al detalle para conseguir tus boletos.';
             }
         }
 
@@ -259,10 +250,6 @@
             return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
         }
 
-        function getTypeAvailability(ticketType) {
-            return Number(ticketType.capacity) - Number(ticketType.sold || 0);
-        }
-
         function renderEvents() {
             eventsRoot.innerHTML = '';
 
@@ -278,7 +265,6 @@
                 const card = document.createElement('article');
                 card.className = 'event-card';
                 card.setAttribute('data-event-open', event.id);
-                const editable = canEditEventImage(event);
 
                 const imageHtml = event.image_url
                     ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
@@ -288,7 +274,6 @@
                     ${imageHtml}
                     <h3>${event.name}</h3>
                     <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
-                    ${editable ? '<div class="event-card-actions"><button class="image-btn" type="button">Editar evento</button></div>' : ''}
                 `;
 
                 eventsRoot.appendChild(card);
@@ -298,46 +283,12 @@
         async function loadEvents() {
             eventsRoot.innerHTML = '<div class="loader">Cargando eventos...</div>';
             try {
-                state.events = await apiCall('GET', '/events');
+                const events = await apiCall('GET', '/events');
+                state.events = events;
                 renderEvents();
                 notify('Eventos actualizados correctamente', 'ok');
             } catch (err) {
                 eventsRoot.innerHTML = '<div class="empty">No se pudieron cargar los eventos.</div>';
-                notify(err.message, 'err');
-            }
-        }
-
-        async function purchase(eventId) {
-            if (!state.token) {
-                notify('Debes iniciar sesion para comprar boletos', 'err');
-                openLoginModal();
-                return;
-            }
-
-            if (state.user?.role === 'organizer') {
-                notify('Un organizer no puede comprar boletos', 'err');
-                return;
-            }
-
-            const typeId = document.getElementById(`type-${eventId}`).value;
-            const qty = parseInt(document.getElementById(`qty-${eventId}`).value, 10) || 1;
-
-            if (!typeId) {
-                notify('Selecciona un tipo de boleto', 'err');
-                return;
-            }
-
-            try {
-                const result = await apiCall('POST', '/tickets/purchase', {
-                    ticket_type_id: typeId,
-                    quantity: qty
-                });
-                notify(
-                    `Compra realizada: ${result.quantity} boleto(s) ${result.ticketType.type_name} por $${Number(result.total).toFixed(2)}`,
-                    'ok'
-                );
-                await loadEvents();
-            } catch (err) {
                 notify(err.message, 'err');
             }
         }
@@ -458,18 +409,6 @@
         });
 
         eventsRoot.addEventListener('click', (event) => {
-            const editButton = event.target.closest('.image-btn');
-            if (editButton) {
-                const card = editButton.closest('[data-event-open]');
-                if (!card) {
-                    return;
-                }
-
-                event.stopPropagation();
-                window.location.href = `/event.html?id=${encodeURIComponent(card.dataset.eventOpen)}`;
-                return;
-            }
-
             const card = event.target.closest('[data-event-open]');
             if (!card) {
                 return;
