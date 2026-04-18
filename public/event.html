@@ -4,208 +4,90 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle de Evento</title>
-    <style>
-        :root {
-            --bg: #f6f1e6;
-            --surface: #fff;
-            --line: #ddd3c0;
-            --ink: #161a22;
-            --muted: #626978;
-            --primary: #1c2230;
-            --ok: #125f3a;
-            --err: #9a2525;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-            background: var(--bg);
-            color: var(--ink);
-        }
-
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 20;
-            border-bottom: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(6px);
-            padding: 12px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .topbar button {
-            width: auto;
-            border: 0;
-            border-radius: 8px;
-            padding: 8px 12px;
-            cursor: pointer;
-            background: var(--primary);
-            color: #fff;
-            font: inherit;
-        }
-
-        main {
-            width: min(920px, calc(100% - 24px));
-            margin: 16px auto 40px;
-            display: grid;
-            gap: 14px;
-        }
-
-        .panel {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 14px;
-        }
-
-        .hero-image {
-            width: 100%;
-            max-height: 340px;
-            object-fit: cover;
-            border-radius: 10px;
-            border: 1px solid #e4dcca;
-            background: #efe7d7;
-        }
-
-        .title {
-            margin: 12px 0 6px;
-            font-size: 28px;
-        }
-
-        .meta {
-            margin: 0;
-            color: var(--muted);
-            line-height: 1.5;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(180px, 1fr));
-            gap: 10px;
-        }
-
-        .full { grid-column: 1 / -1; }
-
-        input, textarea, button, select {
-            width: 100%;
-            border-radius: 8px;
-            border: 1px solid #cec5b4;
-            padding: 9px 10px;
-            font: inherit;
-        }
-
-        .actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .actions button {
-            width: auto;
-            border: 0;
-            background: var(--primary);
-            color: #fff;
-            cursor: pointer;
-            border-radius: 8px;
-            padding: 9px 12px;
-        }
-
-        .ticket-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
-
-        .ticket-table th,
-        .ticket-table td {
-            border-bottom: 1px solid #ede4d2;
-            padding: 8px;
-            text-align: left;
-        }
-
-        .hidden { display: none !important; }
-
-        .toasts {
-            position: fixed;
-            left: 12px;
-            bottom: 12px;
-            z-index: 50;
-            width: min(330px, calc(100% - 24px));
-            display: grid;
-            gap: 8px;
-        }
-
-        .toast {
-            border-radius: 8px;
-            border: 1px solid;
-            padding: 9px 10px;
-            background: #fff;
-            font-size: 13px;
-        }
-
-        .toast.ok { border-color: #a8d1be; color: var(--ok); }
-        .toast.err { border-color: #deaaaa; color: var(--err); }
-        .toast.info { border-color: #b9c7db; color: #24466d; }
-
-        @media (max-width: 700px) {
-            .grid { grid-template-columns: 1fr; }
-        }
-    </style>
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <header class="topbar">
-        <strong id="topTitle">Detalle del evento</strong>
+        <a class="brand brand-link" href="/" aria-label="Ir al inicio">
+            <div class="brand-mark">TM</div>
+            <span id="topTitle">Detalle del evento</span>
+        </a>
         <div class="actions">
             <button id="backHome" type="button">Volver</button>
         </div>
     </header>
 
     <main>
-        <section class="panel">
-            <img id="eventImage" class="hero-image" alt="Imagen del evento">
-            <h1 id="eventName" class="title"></h1>
-            <p id="eventMeta" class="meta"></p>
-            <p id="eventDescription" class="meta"></p>
-        </section>
-
-        <section class="panel">
-            <h2>Tipos de boleto</h2>
-            <table class="ticket-table">
-                <thead>
-                    <tr>
-                        <th>Tipo</th>
-                        <th>Precio</th>
-                        <th>Disponibles</th>
-                    </tr>
-                </thead>
-                <tbody id="ticketTypesBody"></tbody>
-            </table>
-        </section>
-
-        <section id="editPanel" class="panel hidden">
-            <h2>Editar evento</h2>
-            <div class="grid">
-                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
-                <input id="editLocation" class="full" type="text" placeholder="Lugar">
-                <input id="editDate" type="date">
-                <input id="editTime" type="time">
-                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
-                <input id="editArtist" type="text" placeholder="Artista">
-                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
-                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
+        <section class="panel hero-layout">
+            <div class="event-media-column">
+                <img id="eventImage" class="hero-image" alt="Imagen del evento">
             </div>
+            <div class="event-content-column">
+                <div class="preview-info">
+                    <h1 id="eventName" class="title"></h1>
+                    <p id="eventMeta" class="meta"></p>
+                    <p id="eventDescription" class="meta"></p>
+                </div>
 
-            <div class="actions" style="margin-top:10px;">
-                <button id="saveEvent" type="button">Guardar cambios</button>
-                <button id="pickImage" type="button">Cambiar imagen</button>
+                <section class="panel ticket-panel ticket-panel-inline">
+                    <div class="section-title-row">
+                        <div>
+                            <h2>Tipos de boleto</h2>
+                            <p class="ticket-summary">Todo queda en un solo cuadro para comparar precio, capacidad y disponibilidad sin perder tiempo.</p>
+                        </div>
+                        <div id="ticketCountPill" class="session-pill">0 tipos</div>
+                    </div>
+                    <div class="ticket-board">
+                        <div id="ticketTypesBody" class="ticket-list"></div>
+                        <div id="ticketEmptyState" class="ticket-empty hidden">No hay tipos de boleto configurados</div>
+                    </div>
+                </section>
+
+                <div id="editPanel" class="edit-subpanel hidden">
+                    <h2>Panel de organizador</h2>
+                    <div class="manager-stack">
+                        <div class="manager-box">
+                            <h3>Editar datos del evento</h3>
+                            <div class="grid">
+                                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
+                                <input id="editLocation" class="full" type="text" placeholder="Lugar">
+                                <input id="editDate" type="date">
+                                <input id="editTime" type="time">
+                                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
+                                <input id="editArtist" type="text" placeholder="Artista">
+                                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
+                                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
+                            </div>
+
+                            <div class="actions">
+                                <button id="saveEvent" type="button">Guardar cambios</button>
+                                <button id="pickImage" type="button">Cambiar imagen</button>
+                                <button id="deleteEvent" type="button" class="delete-event">Eliminar evento</button>
+                            </div>
+                            <input id="imagePicker" class="hidden" type="file" accept="image/*">
+                        </div>
+
+                        <div class="manager-box">
+                            <h3>Crear o editar tipo de boleto</h3>
+                            <p class="helper">Categorias disponibles: General/Normal, Numerado, VIP y Platino.</p>
+                            <div class="grid">
+                                <select id="newTicketTypeName">
+                                    <option value="General/Normal">General/Normal</option>
+                                    <option value="Numerado">Numerado</option>
+                                    <option value="VIP">VIP</option>
+                                    <option value="Platino">Platino</option>
+                                </select>
+                                <input id="newTicketPrice" type="number" min="0" step="0.01" placeholder="Precio">
+                                <input id="newTicketCapacity" type="number" min="1" placeholder="Capacidad">
+                            </div>
+                            <div class="actions">
+                                <button id="createTicketType" type="button">Crear boleto</button>
+                                <button id="clearTicketTypeForm" type="button">Limpiar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <input id="imagePicker" class="hidden" type="file" accept="image/*">
         </section>
     </main>
 
@@ -216,11 +98,14 @@
             token: localStorage.getItem('tm_token') || null,
             user: null,
             eventId: null,
-            event: null
+            event: null,
+            editingTicketTypeId: null
         };
 
         const editPanel = document.getElementById('editPanel');
         const imagePicker = document.getElementById('imagePicker');
+        const ticketCountPill = document.getElementById('ticketCountPill');
+        const ticketEmptyState = document.getElementById('ticketEmptyState');
 
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
@@ -254,7 +139,7 @@
                 return true;
             }
 
-            return state.user.role === 'organizer' && String(state.user.id) === String(event.organizer_id);
+            return state.user.role === 'organizer' || String(state.user.id) === String(event.organizer_id);
         }
 
         async function apiCall(method, url, body = null) {
@@ -311,18 +196,88 @@
             document.getElementById('topTitle').textContent = event.name || 'Detalle del evento';
 
             const body = document.getElementById('ticketTypesBody');
-            const rows = (event.ticketTypes || []).map((type) => {
+            const editable = canEditEvent(event);
+            const ticketTypes = event.ticketTypes || [];
+            ticketCountPill.textContent = `${ticketTypes.length} tipo${ticketTypes.length === 1 ? '' : 's'}`;
+            ticketEmptyState.classList.toggle('hidden', ticketTypes.length !== 0);
+
+            const cards = ticketTypes.map((type) => {
                 const available = Number(type.capacity) - Number(type.sold || 0);
-                return `<tr><td>${type.type_name}</td><td>$${Number(type.price).toFixed(2)}</td><td>${available}</td></tr>`;
+                return `<article class="ticket-card">
+                    <span class="ticket-badge">${type.type_name}</span>
+                    <h3>$${Number(type.price).toFixed(2)}</h3>
+                    <div class="ticket-stats">
+                        <div class="ticket-stat"><span>Disponibles</span><strong>${available}</strong></div>
+                        <div class="ticket-stat"><span>Capacidad</span><strong>${Number(type.capacity)}</strong></div>
+                    </div>
+                    <div class="ticket-stat"><span>Vendidos</span><strong>${Number(type.sold || 0)}</strong></div>
+                    ${editable ? `
+                        <div class="actions">
+                            <button type="button" data-edit-ticket-type="${type.id}">Editar</button>
+                            <button type="button" class="delete" data-delete-ticket-type="${type.id}">Eliminar</button>
+                        </div>
+                    ` : ''}
+                </article>`;
             }).join('');
 
-            body.innerHTML = rows || '<tr><td colspan="3">No hay tipos de boleto configurados</td></tr>';
+            body.innerHTML = cards;
 
-            const editable = canEditEvent(event);
             editPanel.classList.toggle('hidden', !editable);
             if (editable) {
                 fillEditForm(event);
             }
+        }
+
+        async function deleteEvent() {
+            const event = state.event;
+            if (!event) {
+                return;
+            }
+
+            const code = String(Math.floor(1000 + Math.random() * 9000));
+            const answer = window.prompt(
+                `Para eliminar ${event.name}, escribe el nombre exacto del evento o el codigo ${code}`
+            );
+
+            if (answer === null) {
+                return;
+            }
+
+            const normalizedAnswer = answer.trim().toLowerCase();
+            const normalizedName = String(event.name || '').trim().toLowerCase();
+            if (normalizedAnswer !== normalizedName && answer.trim() !== code) {
+                notify('La confirmacion no coincide. No se elimino el evento.', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('DELETE', `/events/${state.eventId}`);
+                notify('Evento eliminado', 'ok');
+                window.location.href = '/';
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        function clearTicketTypeForm() {
+            state.editingTicketTypeId = null;
+            document.getElementById('newTicketTypeName').value = 'General/Normal';
+            document.getElementById('newTicketPrice').value = '';
+            document.getElementById('newTicketCapacity').value = '';
+            document.getElementById('createTicketType').textContent = 'Crear boleto';
+        }
+
+        function startEditTicketType(ticketTypeId) {
+            const ticketType = (state.event.ticketTypes || []).find((item) => String(item.id) === String(ticketTypeId));
+            if (!ticketType) {
+                return;
+            }
+
+            state.editingTicketTypeId = String(ticketType.id);
+            document.getElementById('newTicketTypeName').value = ticketType.type_name;
+            document.getElementById('newTicketPrice').value = Number(ticketType.price);
+            document.getElementById('newTicketCapacity').value = Number(ticketType.capacity);
+            document.getElementById('createTicketType').textContent = 'Actualizar boleto';
         }
 
         async function loadEvent() {
@@ -352,6 +307,60 @@
             try {
                 await apiCall('PUT', `/events/${state.eventId}`, payload);
                 notify('Evento actualizado', 'ok');
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function createTicketType() {
+            const payload = {
+                type_name: document.getElementById('newTicketTypeName').value.trim(),
+                price: Number(document.getElementById('newTicketPrice').value),
+                capacity: Number(document.getElementById('newTicketCapacity').value)
+            };
+
+            if (!payload.type_name || !Number.isFinite(payload.price) || !Number.isFinite(payload.capacity)) {
+                notify('Completa tipo, precio y capacidad para crear boleto', 'err');
+                return;
+            }
+
+            try {
+                if (state.editingTicketTypeId) {
+                    await apiCall('PUT', `/events/${state.eventId}/ticket-types/${state.editingTicketTypeId}`, payload);
+                    notify('Tipo de boleto actualizado', 'ok');
+                } else {
+                    await apiCall('POST', `/events/${state.eventId}/ticket-types`, payload);
+                    notify('Tipo de boleto creado', 'ok');
+                }
+
+                clearTicketTypeForm();
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function deleteTicketType(ticketTypeId) {
+            const ticketType = (state.event.ticketTypes || []).find((item) => String(item.id) === String(ticketTypeId));
+            if (!ticketType) {
+                notify('Tipo de boleto no encontrado', 'err');
+                return;
+            }
+
+            const approved = window.confirm(`Se eliminara el tipo ${ticketType.type_name} y sus boletos asignados. Deseas continuar?`);
+            if (!approved) {
+                return;
+            }
+
+            try {
+                await apiCall('DELETE', `/events/${state.eventId}/ticket-types/${ticketTypeId}`);
+                notify('Tipo de boleto eliminado', 'ok');
+
+                if (String(state.editingTicketTypeId) === String(ticketTypeId)) {
+                    clearTicketTypeForm();
+                }
+
                 await loadEvent();
             } catch (err) {
                 notify(err.message, 'err');
@@ -434,7 +443,23 @@
 
         document.getElementById('saveEvent').addEventListener('click', saveEvent);
         document.getElementById('pickImage').addEventListener('click', () => imagePicker.click());
+        document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
         imagePicker.addEventListener('change', handleImageSelection);
+        document.getElementById('createTicketType').addEventListener('click', createTicketType);
+        document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);
+
+        document.getElementById('ticketTypesBody').addEventListener('click', (event) => {
+            const editButton = event.target.closest('[data-edit-ticket-type]');
+            if (editButton) {
+                startEditTicketType(editButton.dataset.editTicketType);
+                return;
+            }
+
+            const deleteButton = event.target.closest('[data-delete-ticket-type]');
+            if (deleteButton) {
+                deleteTicketType(deleteButton.dataset.deleteTicketType);
+            }
+        });
 
         init();
     </script>

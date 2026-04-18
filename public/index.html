@@ -4,490 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ticketmaster Clone</title>
-    <style>
-        :root {
-            --bg-0: #f4efe3;
-            --bg-1: #f9f6ef;
-            --surface: #fffdf8;
-            --surface-strong: #fff;
-            --ink: #111318;
-            --muted: #646a76;
-            --line: #dbd3c0;
-            --brand: #d8321c;
-            --brand-hover: #b72714;
-            --ok: #10663f;
-            --warn: #9a6016;
-            --err: #932020;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            color: var(--ink);
-            background:
-                radial-gradient(circle at 10% 10%, rgba(216, 50, 28, 0.08), transparent 35%),
-                radial-gradient(circle at 90% 0%, rgba(17, 19, 24, 0.08), transparent 30%),
-                linear-gradient(180deg, var(--bg-0), var(--bg-1));
-            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-            min-height: 100vh;
-        }
-
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 20;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 24px;
-            border-bottom: 1px solid var(--line);
-            backdrop-filter: blur(6px);
-            background: rgba(255, 252, 244, 0.9);
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            font-weight: 700;
-        }
-
-        .brand-mark {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            background: var(--ink);
-            color: #fff;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .topbar-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .auth-mini {
-            border: 0;
-            border-radius: 999px;
-            padding: 8px 12px;
-            font-weight: 700;
-            font-size: 12px;
-            cursor: pointer;
-            background: var(--ink);
-            color: #fff;
-            transition: transform 0.2s ease, opacity 0.2s ease;
-        }
-
-        .auth-mini:hover {
-            transform: translateY(-1px);
-            opacity: 0.92;
-        }
-
-        .auth-mini.secondary {
-            background: #f3eee3;
-            color: #1d2027;
-            border: 1px solid #d8cfbe;
-        }
-
-        .session-pill {
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            padding: 8px 12px;
-            font-size: 12px;
-            color: var(--muted);
-            background: var(--surface);
-        }
-
-        main {
-            width: min(1100px, calc(100% - 30px));
-            margin: 24px auto 70px;
-        }
-
-        .hero {
-            background: linear-gradient(135deg, #171b23, #111318);
-            color: #f7f8fb;
-            border-radius: 18px;
-            padding: 26px;
-            margin-bottom: 20px;
-            box-shadow: 0 14px 35px rgba(17, 19, 24, 0.18);
-            animation: riseIn 500ms ease;
-        }
-
-        .hero h1 {
-            margin: 0 0 8px;
-            font-size: clamp(24px, 3.7vw, 36px);
-        }
-
-        .hero p {
-            margin: 0;
-            max-width: 650px;
-            color: #d9deea;
-        }
-
-        .section-head {
-            margin: 24px 0 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section-head h2 {
-            margin: 0;
-            font-size: 24px;
-        }
-
-        .refresh-btn {
-            border: 0;
-            padding: 10px 14px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 700;
-            background: #232b3a;
-            color: #fff;
-        }
-
-        .events-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(295px, 1fr));
-            gap: 16px;
-        }
-
-        .event-card {
-            background: var(--surface-strong);
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 16px;
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.05);
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            animation: riseIn 460ms ease both;
-            cursor: pointer;
-        }
-
-        .event-card h3 {
-            margin: 0;
-            font-size: 19px;
-        }
-
-        .event-image {
-            width: 100%;
-            height: 170px;
-            object-fit: cover;
-            border-radius: 10px;
-            border: 1px solid #e3dbc9;
-            background: #f2ecdf;
-        }
-
-        .event-image-placeholder {
-            width: 100%;
-            height: 170px;
-            border-radius: 10px;
-            border: 1px dashed #d7cdbb;
-            display: grid;
-            place-items: center;
-            color: #786f60;
-            background: #f6f0e2;
-            font-size: 13px;
-        }
-
-        .event-card-actions {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: -4px;
-        }
-
-        .image-btn {
-            width: auto;
-            padding: 6px 10px;
-            font-size: 12px;
-            border: 1px solid #cfc6b5;
-            background: #f8f2e6;
-            color: #2a2f39;
-            cursor: pointer;
-        }
-
-        .event-meta {
-            margin: 0;
-            color: var(--muted);
-            font-size: 14px;
-            line-height: 1.45;
-        }
-
-        .ticket-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            background: var(--surface);
-            border-radius: 10px;
-            overflow: hidden;
-            border: 1px solid #ede6d8;
-        }
-
-        .ticket-table th,
-        .ticket-table td {
-            border-bottom: 1px solid #ede6d8;
-            padding: 8px;
-            text-align: left;
-        }
-
-        .ticket-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .purchase-area {
-            display: grid;
-            grid-template-columns: 1fr 90px;
-            gap: 8px;
-        }
-
-        select,
-        input,
-        button {
-            width: 100%;
-            border-radius: 10px;
-            border: 1px solid #cdc5b6;
-            padding: 10px;
-            font: inherit;
-        }
-
-        input,
-        select {
-            background: #fff;
-        }
-
-        .buy-btn {
-            margin-top: 8px;
-            border: 0;
-            background: var(--brand);
-            color: #fff;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .buy-btn:hover {
-            background: var(--brand-hover);
-        }
-
-        .buy-btn[disabled] {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .empty,
-        .loader {
-            border-radius: 14px;
-            border: 1px dashed #c9bfad;
-            background: rgba(255, 255, 255, 0.55);
-            padding: 18px;
-            color: #6a6475;
-        }
-
-        .auth-modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(17, 19, 24, 0.6);
-            display: none;
-            place-items: center;
-            z-index: 40;
-            padding: 16px;
-        }
-
-        .auth-modal.open {
-            display: grid;
-        }
-
-        .auth-panel {
-            width: min(430px, 100%);
-            background: #fff;
-            border-radius: 16px;
-            padding: 18px;
-            border: 1px solid #ddd3c2;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
-            animation: popIn 220ms ease;
-        }
-
-        .auth-panel h3 {
-            margin-top: 0;
-            margin-bottom: 14px;
-        }
-
-        .switch-note {
-            margin: 12px 0 0;
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        .switch-link {
-            border: 0;
-            background: transparent;
-            color: #1d3d6a;
-            text-decoration: underline;
-            cursor: pointer;
-            padding: 0;
-            width: auto;
-            font-weight: 700;
-        }
-
-        .auth-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .auth-grid .full {
-            grid-column: 1 / -1;
-        }
-
-        .auth-actions {
-            margin-top: 8px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .action-primary {
-            background: var(--ink);
-            color: #fff;
-            border: 0;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .action-secondary {
-            background: #f3eee3;
-            border: 1px solid #d8cfbe;
-            cursor: pointer;
-        }
-
-        .toasts {
-            position: fixed;
-            left: 14px;
-            bottom: 14px;
-            z-index: 60;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            width: min(350px, calc(100% - 28px));
-        }
-
-        .toast {
-            border-radius: 10px;
-            border: 1px solid;
-            padding: 10px 12px;
-            font-size: 14px;
-            background: #fff;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
-            animation: toastIn 250ms ease;
-        }
-
-        .toast.ok {
-            border-color: #9fceb8;
-            color: var(--ok);
-            background: #effaf4;
-        }
-
-        .toast.info {
-            border-color: #b0bfd7;
-            color: #1f4066;
-            background: #eef4ff;
-        }
-
-        .toast.err {
-            border-color: #dfaaaa;
-            color: var(--err);
-            background: #fff0f0;
-        }
-
-        @keyframes riseIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes popIn {
-            from {
-                opacity: 0;
-                transform: scale(0.97);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-
-        @keyframes toastIn {
-            from {
-                opacity: 0;
-                transform: translateX(-12px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        @media (max-width: 650px) {
-            .topbar {
-                padding: 12px 14px;
-            }
-
-            .session-pill {
-                display: none;
-            }
-
-            .auth-actions,
-            .purchase-area {
-                grid-template-columns: 1fr;
-            }
-
-            .topbar-actions {
-                gap: 6px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <header class="topbar">
-        <div class="brand">
+        <a class="brand brand-link" href="/" aria-label="Ir al inicio">
             <div class="brand-mark">TM</div>
             <span>Ticketmaster Clone</span>
-        </div>
+        </a>
         <div class="topbar-right">
-            <div id="sessionLabel" class="session-pill">Sin sesion activa</div>
+            <div id="sessionLabel" class="session-pill hidden">Sin sesion activa</div>
             <div class="topbar-actions">
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
                 <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
-                <button id="logoutTopButton" class="auth-mini secondary" type="button" style="display:none;">Cerrar sesion</button>
+                <button id="logoutTopButton" class="auth-mini secondary hidden" type="button">Cerrar sesion</button>
             </div>
         </div>
     </header>
 
     <main>
-        <section class="hero">
-            <h1>Compra boletos en segundos</h1>
-            <p>
+        <section id="heroBanner" class="hero">
+            <div class="hero-kicker">Ticketmaster Clone</div>
+            <h1 id="heroTitle">Compra boletos en segundos</h1>
+            <p id="heroCopy">
                 Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso.
                 Si no tienes sesion, la compra se bloquea hasta que inicies sesion.
             </p>
@@ -504,14 +43,18 @@
 
     <div id="loginModal" class="auth-modal" aria-hidden="true">
         <div class="auth-panel" role="dialog" aria-modal="true" aria-label="Iniciar sesion">
-            <h3>Iniciar sesion</h3>
-            <div class="auth-grid">
-                <input id="loginEmail" class="full" type="email" placeholder="Correo para login">
-                <input id="loginPassword" class="full" type="password" placeholder="Contrasena para login">
+            <div class="login-head">
+                <h3>Iniciar sesion</h3>
+                <button id="closeLoginIcon" class="icon-close" type="button" aria-label="Cerrar login">X</button>
+            </div>
+            <div class="auth-grid auth-grid-vertical">
+                <label class="field-label" for="loginEmail">Correo electronico</label>
+                <input id="loginEmail" type="email" placeholder="correo@gmail.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label class="field-label" for="loginPassword">Contrasena</label>
+                <input id="loginPassword" type="password" placeholder="******" autocomplete="new-password">
             </div>
             <div class="auth-actions">
-                <button id="doLogin" class="action-primary" type="button">Entrar</button>
-                <button id="closeLogin" class="action-secondary" type="button">Cerrar</button>
+                <button id="doLogin" class="action-primary login-submit" type="button">Iniciar sesion</button>
             </div>
             <p class="switch-note">No tienes cuenta?
                 <button id="openRegisterFromLogin" class="switch-link" type="button">Registrarte</button>
@@ -521,21 +64,33 @@
 
     <div id="registerModal" class="auth-modal" aria-hidden="true">
         <div class="auth-panel" role="dialog" aria-modal="true" aria-label="Registro de usuario">
-            <h3>Crear cuenta</h3>
-            <div class="auth-grid">
-                <input id="regName" type="text" placeholder="Nombre">
-                <input id="regEmail" type="email" placeholder="Correo registro">
-                <input id="regPassword" type="password" placeholder="Contrasena registro">
-                <select id="regRole">
-                    <option value="user">Usuario</option>
-                    <option value="organizer">Organizador</option>
-                    <option value="admin">Admin</option>
-                </select>
+            <div class="register-head">
+                <h3>Registrarme</h3>
+                <button id="closeRegisterIcon" class="icon-close" type="button" aria-label="Cerrar registro">X</button>
+            </div>
+            <div class="auth-grid auth-grid-vertical">
+                <label class="field-label" for="regName">Nombre de usuario</label>
+                <input id="regName" type="text" placeholder="Ingresa usuario" autocomplete="off" autocapitalize="words" spellcheck="false">
+                <label class="field-label" for="regEmail">Correo electronico</label>
+                <input id="regEmail" type="email" placeholder="Ingresa correo" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label class="field-label" for="regPassword">Contrasena</label>
+                <input id="regPassword" type="password" placeholder="******" autocomplete="new-password">
+                <div id="regRoleWrap" class="full hidden">
+                    <label class="field-label" for="regRole">Rol</label>
+                    <select id="regRole">
+                        <option value="user">Usuario</option>
+                        <option value="organizer">Organizador</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <p id="regRoleHint" class="full switch-note switch-note-left">Solo los administradores pueden elegir un rol avanzado.</p>
             </div>
             <div class="auth-actions">
-                <button id="doRegister" class="action-primary" type="button">Registrar</button>
-                <button id="closeRegister" class="action-secondary" type="button">Cerrar</button>
+                <button id="doRegister" class="action-primary login-submit" type="button">Crear mi cuenta</button>
             </div>
+            <p class="switch-note">Ya tienes una cuenta?
+                <button id="openLoginFromRegister" class="switch-link" type="button">Iniciar Sesion</button>
+            </p>
         </div>
     </div>
 
@@ -556,6 +111,8 @@
         const sessionLabel = document.getElementById('sessionLabel');
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
+        const regRoleWrap = document.getElementById('regRoleWrap');
+        const regRoleHint = document.getElementById('regRoleHint');
 
         function isOrganizerOrAdmin() {
             return state.user && (state.user.role === 'organizer' || state.user.role === 'admin');
@@ -570,7 +127,7 @@
                 return true;
             }
 
-            return state.user.role === 'organizer' && String(event.organizer_id) === String(state.user.id);
+            return state.user.role === 'organizer';
         }
 
         function parseUserFromToken(token) {
@@ -601,14 +158,28 @@
         function setAuthUi() {
             if (state.user) {
                 sessionLabel.textContent = `Sesion: ${state.user.name} (${state.user.role})`;
-                loginButton.style.display = 'none';
-                registerButton.style.display = 'none';
-                logoutTopButton.style.display = 'inline-block';
+                sessionLabel.classList.remove('hidden');
+                loginButton.classList.add('hidden');
+                registerButton.classList.add('hidden');
+                logoutTopButton.classList.remove('hidden');
+                if (state.user.role === 'organizer' || state.user.role === 'admin') {
+                    document.getElementById('heroBanner').classList.add('hero-organizer');
+                    document.getElementById('heroTitle').textContent = `Bienvenido, ${state.user.name}`;
+                    document.getElementById('heroCopy').textContent = 'Desde aqui administras eventos y revisas el listado público sin ver propaganda de compra.';
+                } else {
+                    document.getElementById('heroBanner').classList.remove('hero-organizer');
+                    document.getElementById('heroTitle').textContent = 'Compra boletos en segundos';
+                    document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso. Si no tienes sesion, la compra se bloquea hasta que inicies sesion.';
+                }
             } else {
                 sessionLabel.textContent = 'Sin sesion activa';
-                loginButton.style.display = 'inline-block';
-                registerButton.style.display = 'inline-block';
-                logoutTopButton.style.display = 'none';
+                sessionLabel.classList.add('hidden');
+                loginButton.classList.remove('hidden');
+                registerButton.classList.remove('hidden');
+                logoutTopButton.classList.add('hidden');
+                document.getElementById('heroBanner').classList.remove('hero-organizer');
+                document.getElementById('heroTitle').textContent = 'Compra boletos en segundos';
+                document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles, compara tipos de boletos y precios, y compra en un solo paso. Si no tienes sesion, la compra se bloquea hasta que inicies sesion.';
             }
         }
 
@@ -638,23 +209,45 @@
         }
 
         function openLoginModal() {
+            clearLoginForm();
             loginModal.classList.add('open');
             loginModal.setAttribute('aria-hidden', 'false');
         }
 
         function closeLoginModal() {
+            clearLoginForm();
             loginModal.classList.remove('open');
             loginModal.setAttribute('aria-hidden', 'true');
         }
 
         function openRegisterModal() {
+            clearRegisterForm();
+            const isAdmin = state.user?.role === 'admin';
+            regRoleWrap.classList.toggle('hidden', !isAdmin);
+            regRoleHint.classList.toggle('hidden', isAdmin);
+            if (!isAdmin) {
+                document.getElementById('regRole').value = 'user';
+            }
             registerModal.classList.add('open');
             registerModal.setAttribute('aria-hidden', 'false');
         }
 
         function closeRegisterModal() {
+            clearRegisterForm();
             registerModal.classList.remove('open');
             registerModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function clearLoginForm() {
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginPassword').value = '';
+        }
+
+        function clearRegisterForm() {
+            document.getElementById('regName').value = '';
+            document.getElementById('regEmail').value = '';
+            document.getElementById('regPassword').value = '';
+            document.getElementById('regRole').value = 'user';
         }
 
         function formatEventDate(dateText, timeText) {
@@ -685,6 +278,7 @@
                 const card = document.createElement('article');
                 card.className = 'event-card';
                 card.setAttribute('data-event-open', event.id);
+                const editable = canEditEventImage(event);
 
                 const imageHtml = event.image_url
                     ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
@@ -694,6 +288,7 @@
                     ${imageHtml}
                     <h3>${event.name}</h3>
                     <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                    ${editable ? '<div class="event-card-actions"><button class="image-btn" type="button">Editar evento</button></div>' : ''}
                 `;
 
                 eventsRoot.appendChild(card);
@@ -774,7 +369,7 @@
             const name = document.getElementById('regName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
-            const role = document.getElementById('regRole').value;
+            const role = state.user?.role === 'admin' ? document.getElementById('regRole').value : 'user';
 
             if (!name || !email || !password) {
                 notify('Completa nombre, correo y contrasena para registrar', 'err');
@@ -836,11 +431,15 @@
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);
         logoutTopButton.addEventListener('click', logoutHandler);
-        document.getElementById('closeLogin').addEventListener('click', closeLoginModal);
-        document.getElementById('closeRegister').addEventListener('click', closeRegisterModal);
+        document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
+        document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
         document.getElementById('openRegisterFromLogin').addEventListener('click', () => {
             closeLoginModal();
             openRegisterModal();
+        });
+        document.getElementById('openLoginFromRegister').addEventListener('click', () => {
+            closeRegisterModal();
+            openLoginModal();
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
@@ -859,6 +458,18 @@
         });
 
         eventsRoot.addEventListener('click', (event) => {
+            const editButton = event.target.closest('.image-btn');
+            if (editButton) {
+                const card = editButton.closest('[data-event-open]');
+                if (!card) {
+                    return;
+                }
+
+                event.stopPropagation();
+                window.location.href = `/event.html?id=${encodeURIComponent(card.dataset.eventOpen)}`;
+                return;
+            }
+
             const card = event.target.closest('[data-event-open]');
             if (!card) {
                 return;

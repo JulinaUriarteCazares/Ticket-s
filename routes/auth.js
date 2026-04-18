@@ -5,6 +5,25 @@ const pool = require('../db');
 
 const router = express.Router();
 
+function getRequesterRoleFromAuthHeader(req) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = header.slice(7).trim();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return decoded?.role || null;
+  } catch (err) {
+    return null;
+  }
+}
+
 router.post('/register', async (req, res) => {
   const { name, email, password, role = 'user' } = req.body;
 
@@ -17,11 +36,21 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Rol inválido' });
   }
 
+  const requesterRole = getRequesterRoleFromAuthHeader(req);
+  const canCreatePrivilegedUser = requesterRole === 'admin';
+  const requestedRole = String(role || 'user');
+
+  if (!canCreatePrivilegedUser && requestedRole !== 'user') {
+    return res.status(403).json({ error: 'Solo un admin puede registrar organizadores o administradores' });
+  }
+
+  const finalRole = canCreatePrivilegedUser ? requestedRole : 'user';
+
   try {
     const hashed = await bcrypt.hash(password, 10);
     const result = await pool.query(
       'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-      [name, email, hashed, role]
+      [name, email, hashed, finalRole]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

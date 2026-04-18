@@ -45,7 +45,48 @@ function canManageEvent(user, organizerId) {
     return false;
   }
 
-  return user.role === 'admin' || String(organizerId) === String(user.id);
+  return user.role === 'admin' || user.role === 'organizer' || String(organizerId) === String(user.id);
+}
+
+function normalizeTicketCategory(rawTypeName) {
+  const value = String(rawTypeName || '').trim().toLowerCase();
+  if (!value) {
+    return null;
+  }
+
+  if (['general', 'normal', 'general/normal', 'general o normal', 'generla', 'generla o normal'].includes(value)) {
+    return 'General/Normal';
+  }
+
+  if (value === 'numerado') {
+    return 'Numerado';
+  }
+
+  if (value === 'vip') {
+    return 'VIP';
+  }
+
+  if (value === 'platino') {
+    return 'Platino';
+  }
+
+  return null;
+}
+
+async function getTicketCapacitySum(eventId, excludeTicketTypeId = null) {
+  if (excludeTicketTypeId) {
+    const result = await pool.query(
+      'SELECT COALESCE(SUM(capacity), 0) AS total FROM ticket_types WHERE event_id = $1 AND id <> $2',
+      [eventId, excludeTicketTypeId]
+    );
+    return Number(result.rows[0].total || 0);
+  }
+
+  const result = await pool.query(
+    'SELECT COALESCE(SUM(capacity), 0) AS total FROM ticket_types WHERE event_id = $1',
+    [eventId]
+  );
+  return Number(result.rows[0].total || 0);
 }
 
 router.get('/', async (req, res) => {
@@ -207,6 +248,59 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+router.delete('/:id', auth, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  let transactionStarted = false;
+
+  try {
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const eventResult = await client.query('SELECT id, name, organizer_id FROM events WHERE id = $1', [id]);
+    if (eventResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ error: 'Evento no encontrado' });
+    }
+
+    const event = eventResult.rows[0];
+    if (!canManageEvent(req.user, event.organizer_id)) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    await client.query(
+      `DELETE FROM tickets
+       WHERE ticket_type_id IN (
+         SELECT id FROM ticket_types WHERE event_id = $1
+       )`,
+      [id]
+    );
+
+    await client.query('DELETE FROM ticket_types WHERE event_id = $1', [id]);
+    await client.query('DELETE FROM events WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    res.json({ message: 'Evento eliminado correctamente', eventName: event.name });
+  } catch (err) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        return res.status(500).json({ error: rollbackErr.message });
+      }
+    }
+
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/:id/ticket-types', async (req, res) => {
   const { id } = req.params;
   try {
@@ -221,19 +315,172 @@ router.post('/:id/ticket-types', auth, async (req, res) => {
   const { id: eventId } = req.params;
   const { type_name, price, capacity } = req.body;
   try {
-    const event = await pool.query('SELECT organizer_id FROM events WHERE id = $1', [eventId]);
-    if (event.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' });
-    if (req.user.role !== 'admin' && event.rows[0].organizer_id !== req.user.id) {
+    const eventResult = await pool.query('SELECT organizer_id, capacity FROM events WHERE id = $1', [eventId]);
+    if (eventResult.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' });
+
+    const event = eventResult.rows[0];
+    if (!canManageEvent(req.user, event.organizer_id)) {
       return res.status(403).json({ error: 'No autorizado' });
     }
+
+    const normalizedType = normalizeTicketCategory(type_name);
+    if (!normalizedType) {
+      return res.status(400).json({ error: 'Categoria invalida. Usa: General/Normal, Numerado, VIP o Platino' });
+    }
+
+    const numericCapacity = Number(capacity);
+    if (!Number.isInteger(numericCapacity) || numericCapacity < 1) {
+      return res.status(400).json({ error: 'La capacidad del boleto debe ser un entero mayor a 0' });
+    }
+
+    const currentTotalCapacity = await getTicketCapacitySum(eventId);
+    if (currentTotalCapacity + numericCapacity > Number(event.capacity)) {
+      return res.status(400).json({
+        error: `La capacidad total de boletos no puede exceder la capacidad del evento (${event.capacity})`
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO ticket_types (event_id, type_name, price, capacity)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [eventId, type_name, price, capacity]
+      [eventId, normalizedType, price, numericCapacity]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:eventId/ticket-types/:ticketTypeId', auth, async (req, res) => {
+  const { eventId, ticketTypeId } = req.params;
+  const { type_name, price, capacity } = req.body;
+
+  try {
+    const eventResult = await pool.query('SELECT organizer_id, capacity FROM events WHERE id = $1', [eventId]);
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Evento no encontrado' });
+    }
+
+    const event = eventResult.rows[0];
+    if (!canManageEvent(req.user, event.organizer_id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const ticketTypeResult = await pool.query(
+      'SELECT * FROM ticket_types WHERE id = $1 AND event_id = $2',
+      [ticketTypeId, eventId]
+    );
+    if (ticketTypeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tipo de boleto no encontrado' });
+    }
+
+    const currentType = ticketTypeResult.rows[0];
+    const normalizedType = normalizeTicketCategory(type_name ?? currentType.type_name);
+    if (!normalizedType) {
+      return res.status(400).json({ error: 'Categoria invalida. Usa: General/Normal, Numerado, VIP o Platino' });
+    }
+
+    const numericCapacity = Number(capacity ?? currentType.capacity);
+    if (!Number.isInteger(numericCapacity) || numericCapacity < 1) {
+      return res.status(400).json({ error: 'La capacidad del boleto debe ser un entero mayor a 0' });
+    }
+
+    if (numericCapacity < Number(currentType.sold || 0)) {
+      return res.status(400).json({ error: `La capacidad no puede ser menor a los vendidos (${currentType.sold})` });
+    }
+
+    const totalWithoutCurrent = await getTicketCapacitySum(eventId, ticketTypeId);
+    if (totalWithoutCurrent + numericCapacity > Number(event.capacity)) {
+      return res.status(400).json({
+        error: `La capacidad total de boletos no puede exceder la capacidad del evento (${event.capacity})`
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE ticket_types
+       SET type_name = $1, price = $2, capacity = $3
+       WHERE id = $4 AND event_id = $5
+       RETURNING *`,
+      [normalizedType, price ?? currentType.price, numericCapacity, ticketTypeId, eventId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:eventId/ticket-types/:ticketTypeId', auth, async (req, res) => {
+  const { eventId, ticketTypeId } = req.params;
+  const client = await pool.connect();
+  let transactionStarted = false;
+
+  try {
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    let ticketTypeResult = await client.query(
+      `SELECT tt.id, tt.event_id, e.organizer_id
+       FROM ticket_types tt
+       JOIN events e ON e.id = tt.event_id
+       WHERE tt.id = $1 AND tt.event_id = $2`,
+      [ticketTypeId, eventId]
+    );
+
+    // Fallback when URL eventId is stale but ticket type still exists.
+    if (ticketTypeResult.rows.length === 0) {
+      ticketTypeResult = await client.query(
+        `SELECT tt.id, tt.event_id, e.organizer_id
+         FROM ticket_types tt
+         JOIN events e ON e.id = tt.event_id
+         WHERE tt.id = $1`,
+        [ticketTypeId]
+      );
+    }
+
+    if (ticketTypeResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ error: 'Tipo de boleto no encontrado' });
+    }
+
+    const ticketType = ticketTypeResult.rows[0];
+    if (!canManageEvent(req.user, ticketType.organizer_id)) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const deletedTicketsResult = await client.query('DELETE FROM tickets WHERE ticket_type_id = $1', [ticketTypeId]);
+    const deletedTypeResult = await client.query('DELETE FROM ticket_types WHERE id = $1 AND event_id = $2', [ticketTypeId, ticketType.event_id]);
+
+    if (deletedTypeResult.rowCount === 0) {
+      throw new Error('No se pudo eliminar el tipo de boleto');
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    res.json({
+      message: 'Tipo de boleto eliminado correctamente',
+      deletedTickets: deletedTicketsResult.rowCount || 0
+    });
+  } catch (err) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        return res.status(500).json({ error: rollbackErr.message });
+      }
+    }
+
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'No se puede eliminar por dependencias de base de datos' });
+    }
+
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
