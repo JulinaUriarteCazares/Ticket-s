@@ -178,11 +178,49 @@
             flex-direction: column;
             gap: 12px;
             animation: riseIn 460ms ease both;
+            cursor: pointer;
         }
 
         .event-card h3 {
             margin: 0;
             font-size: 19px;
+        }
+
+        .event-image {
+            width: 100%;
+            height: 170px;
+            object-fit: cover;
+            border-radius: 10px;
+            border: 1px solid #e3dbc9;
+            background: #f2ecdf;
+        }
+
+        .event-image-placeholder {
+            width: 100%;
+            height: 170px;
+            border-radius: 10px;
+            border: 1px dashed #d7cdbb;
+            display: grid;
+            place-items: center;
+            color: #786f60;
+            background: #f6f0e2;
+            font-size: 13px;
+        }
+
+        .event-card-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: -4px;
+        }
+
+        .image-btn {
+            width: auto;
+            padding: 6px 10px;
+            font-size: 12px;
+            border: 1px solid #cfc6b5;
+            background: #f8f2e6;
+            color: #2a2f39;
+            cursor: pointer;
         }
 
         .event-meta {
@@ -519,6 +557,37 @@
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
 
+        function isOrganizerOrAdmin() {
+            return state.user && (state.user.role === 'organizer' || state.user.role === 'admin');
+        }
+
+        function canEditEventImage(event) {
+            if (!state.user) {
+                return false;
+            }
+
+            if (state.user.role === 'admin') {
+                return true;
+            }
+
+            return state.user.role === 'organizer' && String(event.organizer_id) === String(state.user.id);
+        }
+
+        function parseUserFromToken(token) {
+            try {
+                const payload = token.split('.')[1];
+                const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const json = atob(normalized);
+                const data = JSON.parse(json);
+                if (!data || !data.id || !data.role) {
+                    return null;
+                }
+                return { id: data.id, role: data.role, name: data.role };
+            } catch (err) {
+                return null;
+            }
+        }
+
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
             toast.className = `toast ${kind}`;
@@ -615,42 +684,16 @@
             state.events.forEach((event) => {
                 const card = document.createElement('article');
                 card.className = 'event-card';
+                card.setAttribute('data-event-open', event.id);
 
-                const options = (event.ticketTypes || [])
-                    .map((type) => {
-                        const available = getTypeAvailability(type);
-                        return `<option value="${type.id}">${type.type_name} - $${Number(type.price).toFixed(2)} (${available} disp.)</option>`;
-                    })
-                    .join('');
-
-                const rows = (event.ticketTypes || [])
-                    .map((type) => {
-                        const available = getTypeAvailability(type);
-                        return `<tr><td>${type.type_name}</td><td>$${Number(type.price).toFixed(2)}</td><td>${available}</td></tr>`;
-                    })
-                    .join('');
+                const imageHtml = event.image_url
+                    ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
+                    : '<div class="event-image-placeholder">Sin imagen</div>';
 
                 card.innerHTML = `
+                    ${imageHtml}
                     <h3>${event.name}</h3>
                     <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
-                    <table class="ticket-table">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Precio</th>
-                                <th>Disponibles</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows || '<tr><td colspan="3">Sin tipos de boleto configurados</td></tr>'}</tbody>
-                    </table>
-                    <div class="purchase-area">
-                        <select id="type-${event.id}">
-                            <option value="">Selecciona tipo</option>
-                            ${options}
-                        </select>
-                        <input id="qty-${event.id}" type="number" min="1" max="20" value="1" aria-label="Cantidad">
-                    </div>
-                    <button class="buy-btn" data-buy-event="${event.id}" type="button">Comprar</button>
                 `;
 
                 eventsRoot.appendChild(card);
@@ -660,14 +703,7 @@
         async function loadEvents() {
             eventsRoot.innerHTML = '<div class="loader">Cargando eventos...</div>';
             try {
-                const events = await apiCall('GET', '/events');
-                const withTypes = await Promise.all(
-                    events.map(async (event) => {
-                        const ticketTypes = await apiCall('GET', `/events/${event.id}/ticket-types`);
-                        return { ...event, ticketTypes };
-                    })
-                );
-                state.events = withTypes;
+                state.events = await apiCall('GET', '/events');
                 renderEvents();
                 notify('Eventos actualizados correctamente', 'ok');
             } catch (err) {
@@ -680,6 +716,11 @@
             if (!state.token) {
                 notify('Debes iniciar sesion para comprar boletos', 'err');
                 openLoginModal();
+                return;
+            }
+
+            if (state.user?.role === 'organizer') {
+                notify('Un organizer no puede comprar boletos', 'err');
                 return;
             }
 
@@ -720,6 +761,7 @@
                 state.token = result.token;
                 state.user = result.user;
                 localStorage.setItem('tm_token', result.token);
+                localStorage.setItem('tm_user', JSON.stringify(result.user));
                 setAuthUi();
                 closeLoginModal();
                 notify(`Bienvenido ${result.user.name}`, 'ok');
@@ -755,13 +797,27 @@
                 return;
             }
 
+            const storedUser = localStorage.getItem('tm_user');
+            if (storedUser) {
+                try {
+                    state.user = JSON.parse(storedUser);
+                } catch (err) {
+                    state.user = null;
+                }
+            }
+
+            if (!state.user) {
+                state.user = parseUserFromToken(state.token);
+            }
+
             try {
                 const myTickets = await apiCall('GET', '/tickets/my-tickets');
-                if (Array.isArray(myTickets)) {
-                    state.user = { name: 'Usuario', role: 'user' };
+                if (!Array.isArray(myTickets)) {
+                    throw new Error('Sesion invalida');
                 }
             } catch (err) {
                 localStorage.removeItem('tm_token');
+                localStorage.removeItem('tm_user');
                 state.token = null;
                 state.user = null;
             }
@@ -770,6 +826,7 @@
 
         function logoutHandler() {
             localStorage.removeItem('tm_token');
+            localStorage.removeItem('tm_user');
             state.token = null;
             state.user = null;
             setAuthUi();
@@ -802,11 +859,12 @@
         });
 
         eventsRoot.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-buy-event]');
-            if (!button) {
+            const card = event.target.closest('[data-event-open]');
+            if (!card) {
                 return;
             }
-            purchase(button.dataset.buyEvent);
+
+            window.location.href = `/event.html?id=${encodeURIComponent(card.dataset.eventOpen)}`;
         });
 
         (async function init() {

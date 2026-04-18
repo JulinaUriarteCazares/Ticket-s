@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de Evento</title>
+    <style>
+        :root {
+            --bg: #f6f1e6;
+            --surface: #fff;
+            --line: #ddd3c0;
+            --ink: #161a22;
+            --muted: #626978;
+            --primary: #1c2230;
+            --ok: #125f3a;
+            --err: #9a2525;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(6px);
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .topbar button {
+            width: auto;
+            border: 0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background: var(--primary);
+            color: #fff;
+            font: inherit;
+        }
+
+        main {
+            width: min(920px, calc(100% - 24px));
+            margin: 16px auto 40px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .hero-image {
+            width: 100%;
+            max-height: 340px;
+            object-fit: cover;
+            border-radius: 10px;
+            border: 1px solid #e4dcca;
+            background: #efe7d7;
+        }
+
+        .title {
+            margin: 12px 0 6px;
+            font-size: 28px;
+        }
+
+        .meta {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .full { grid-column: 1 / -1; }
+
+        input, textarea, button, select {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #cec5b4;
+            padding: 9px 10px;
+            font: inherit;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .actions button {
+            width: auto;
+            border: 0;
+            background: var(--primary);
+            color: #fff;
+            cursor: pointer;
+            border-radius: 8px;
+            padding: 9px 12px;
+        }
+
+        .ticket-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .ticket-table th,
+        .ticket-table td {
+            border-bottom: 1px solid #ede4d2;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .hidden { display: none !important; }
+
+        .toasts {
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            z-index: 50;
+            width: min(330px, calc(100% - 24px));
+            display: grid;
+            gap: 8px;
+        }
+
+        .toast {
+            border-radius: 8px;
+            border: 1px solid;
+            padding: 9px 10px;
+            background: #fff;
+            font-size: 13px;
+        }
+
+        .toast.ok { border-color: #a8d1be; color: var(--ok); }
+        .toast.err { border-color: #deaaaa; color: var(--err); }
+        .toast.info { border-color: #b9c7db; color: #24466d; }
+
+        @media (max-width: 700px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <strong id="topTitle">Detalle del evento</strong>
+        <div class="actions">
+            <button id="backHome" type="button">Volver</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel">
+            <img id="eventImage" class="hero-image" alt="Imagen del evento">
+            <h1 id="eventName" class="title"></h1>
+            <p id="eventMeta" class="meta"></p>
+            <p id="eventDescription" class="meta"></p>
+        </section>
+
+        <section class="panel">
+            <h2>Tipos de boleto</h2>
+            <table class="ticket-table">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Precio</th>
+                        <th>Disponibles</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketTypesBody"></tbody>
+            </table>
+        </section>
+
+        <section id="editPanel" class="panel hidden">
+            <h2>Editar evento</h2>
+            <div class="grid">
+                <input id="editName" class="full" type="text" placeholder="Nombre del evento">
+                <input id="editLocation" class="full" type="text" placeholder="Lugar">
+                <input id="editDate" type="date">
+                <input id="editTime" type="time">
+                <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
+                <input id="editArtist" type="text" placeholder="Artista">
+                <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
+                <textarea id="editDescription" class="full" rows="3" placeholder="Descripcion"></textarea>
+            </div>
+
+            <div class="actions" style="margin-top:10px;">
+                <button id="saveEvent" type="button">Guardar cambios</button>
+                <button id="pickImage" type="button">Cambiar imagen</button>
+            </div>
+            <input id="imagePicker" class="hidden" type="file" accept="image/*">
+        </section>
+    </main>
+
+    <div id="toastRoot" class="toasts"></div>
+
+    <script>
+        const state = {
+            token: localStorage.getItem('tm_token') || null,
+            user: null,
+            eventId: null,
+            event: null
+        };
+
+        const editPanel = document.getElementById('editPanel');
+        const imagePicker = document.getElementById('imagePicker');
+
+        function notify(message, kind = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${kind}`;
+            toast.textContent = message;
+            document.getElementById('toastRoot').appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        function parseUserFromToken(token) {
+            try {
+                const payload = token.split('.')[1];
+                const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const json = atob(normalized);
+                const data = JSON.parse(json);
+                if (!data || !data.id || !data.role) {
+                    return null;
+                }
+                return { id: data.id, role: data.role, name: data.role };
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function canEditEvent(event) {
+            if (!state.user || !event) {
+                return false;
+            }
+
+            if (state.user.role === 'admin') {
+                return true;
+            }
+
+            return state.user.role === 'organizer' && String(state.user.id) === String(event.organizer_id);
+        }
+
+        async function apiCall(method, url, body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (state.token) {
+                headers.Authorization = `Bearer ${state.token}`;
+            }
+
+            const res = await fetch(`/api${url}`, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null
+            });
+
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (err) {
+                data = {};
+            }
+
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo completar la accion');
+            }
+            return data;
+        }
+
+        function formatDate(dateText, timeText) {
+            if (!dateText) {
+                return 'Fecha por confirmar';
+            }
+            const date = new Date(dateText);
+            const safeDate = Number.isNaN(date.getTime()) ? dateText : date.toLocaleDateString('es-MX');
+            return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
+        }
+
+        function fillEditForm(event) {
+            document.getElementById('editName').value = event.name || '';
+            document.getElementById('editLocation').value = event.location || '';
+            document.getElementById('editDate').value = event.event_date ? String(event.event_date).slice(0, 10) : '';
+            document.getElementById('editTime').value = event.event_time || '';
+            document.getElementById('editCapacity').value = Number(event.capacity || 0);
+            document.getElementById('editArtist').value = event.artist_name || '';
+            document.getElementById('editFee').value = Number(event.artist_fee || 0);
+            document.getElementById('editDescription').value = event.description || '';
+        }
+
+        function renderEvent() {
+            const event = state.event;
+            document.getElementById('eventImage').src = event.image_url || 'https://placehold.co/1000x550?text=Evento';
+            document.getElementById('eventName').textContent = event.name || 'Evento';
+            document.getElementById('eventMeta').textContent = `${formatDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
+            document.getElementById('eventDescription').textContent = event.description || 'Sin descripcion';
+            document.getElementById('topTitle').textContent = event.name || 'Detalle del evento';
+
+            const body = document.getElementById('ticketTypesBody');
+            const rows = (event.ticketTypes || []).map((type) => {
+                const available = Number(type.capacity) - Number(type.sold || 0);
+                return `<tr><td>${type.type_name}</td><td>$${Number(type.price).toFixed(2)}</td><td>${available}</td></tr>`;
+            }).join('');
+
+            body.innerHTML = rows || '<tr><td colspan="3">No hay tipos de boleto configurados</td></tr>';
+
+            const editable = canEditEvent(event);
+            editPanel.classList.toggle('hidden', !editable);
+            if (editable) {
+                fillEditForm(event);
+            }
+        }
+
+        async function loadEvent() {
+            const event = await apiCall('GET', `/events/${state.eventId}`);
+            const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
+            state.event = { ...event, ticketTypes };
+            renderEvent();
+        }
+
+        async function saveEvent() {
+            const payload = {
+                name: document.getElementById('editName').value.trim(),
+                location: document.getElementById('editLocation').value.trim(),
+                event_date: document.getElementById('editDate').value,
+                event_time: document.getElementById('editTime').value,
+                capacity: Number(document.getElementById('editCapacity').value),
+                artist_name: document.getElementById('editArtist').value.trim(),
+                artist_fee: Number(document.getElementById('editFee').value || 0),
+                description: document.getElementById('editDescription').value.trim()
+            };
+
+            if (!payload.name || !payload.location || !payload.event_date || !payload.capacity) {
+                notify('Completa nombre, lugar, fecha y capacidad', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('PUT', `/events/${state.eventId}`, payload);
+                notify('Evento actualizado', 'ok');
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        function readFileAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handleImageSelection() {
+            const file = imagePicker.files && imagePicker.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (!file.type.startsWith('image/')) {
+                notify('Selecciona un archivo de imagen valido', 'err');
+                return;
+            }
+
+            const maxSizeBytes = 3 * 1024 * 1024;
+            if (file.size > maxSizeBytes) {
+                notify('La imagen es muy pesada. Maximo 3MB', 'err');
+                return;
+            }
+
+            try {
+                const imageDataUrl = await readFileAsDataUrl(file);
+                await apiCall('PATCH', `/events/${state.eventId}/image`, { image_url: imageDataUrl });
+                notify('Imagen actualizada', 'ok');
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            } finally {
+                imagePicker.value = '';
+            }
+        }
+
+        function initSession() {
+            const storedUser = localStorage.getItem('tm_user');
+            if (storedUser) {
+                try {
+                    state.user = JSON.parse(storedUser);
+                } catch (err) {
+                    state.user = null;
+                }
+            }
+
+            if (!state.user && state.token) {
+                state.user = parseUserFromToken(state.token);
+            }
+        }
+
+        async function init() {
+            const params = new URLSearchParams(window.location.search);
+            state.eventId = params.get('id');
+            if (!state.eventId) {
+                window.location.href = '/';
+                return;
+            }
+
+            initSession();
+
+            try {
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        document.getElementById('backHome').addEventListener('click', () => {
+            window.location.href = '/';
+        });
+
+        document.getElementById('saveEvent').addEventListener('click', saveEvent);
+        document.getElementById('pickImage').addEventListener('click', () => imagePicker.click());
+        imagePicker.addEventListener('change', handleImageSelection);
+
+        init();
+    </script>
+</body>
+</html>
