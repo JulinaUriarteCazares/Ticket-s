@@ -160,7 +160,7 @@
             const ticketType = ticket.ticketType || {};
             const eventImage = event.image_url || 'https://placehold.co/520x760?text=Evento';
             const seatNumber = ticket.seatNumber || 'N/A';
-            const qrSvg = ticket.qrSvg || '';
+            const qrSvg = ticket.qrSvg || '<svg></svg>';
             const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
             const eventDate = formatDate(event.event_date, event.event_time);
 
@@ -181,7 +181,7 @@
                         </div>
                     </div>
                     <div class="generated-ticket-qr">
-                        <div class="generated-ticket-qr-box">${qrSvg}</div>
+                        <div class="generated-ticket-qr-box qr-container" data-qr-ticket="${index}"></div>
                         <p>Escanea para validar</p>
                         <div class="generated-ticket-actions">
                             <button type="button" data-download-ticket="${index}">Descargar</button>
@@ -202,6 +202,14 @@
 
             purchaseTicketsWrap.classList.remove('hidden');
             purchaseTicketsGrid.innerHTML = lastPurchasedTickets.map(buildTicketCardMarkup).join('');
+            
+            // Render QR codes after HTML is inserted
+            lastPurchasedTickets.forEach((ticket, index) => {
+                const container = purchaseTicketsGrid.querySelector(`[data-qr-ticket="${index}"]`);
+                if (container && ticket.qrSvg) {
+                    container.innerHTML = ticket.qrSvg;
+                }
+            });
         }
 
         function buildStandaloneTicketHtml(ticket) {
@@ -266,44 +274,71 @@
 </html>`;
         }
 
-        function downloadTicket(ticketIndex) {
+        async function downloadTicket(ticketIndex) {
             const ticket = lastPurchasedTickets[ticketIndex];
-            if (!ticket) {
+            if (!ticket || !ticket.id) {
+                notify('Boleto no encontrado', 'err');
                 return;
             }
 
-            const blob = new Blob([buildStandaloneTicketHtml(ticket)], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            const eventName = (ticket.event?.name || state.event?.name || 'boleto').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-            const seat = ticket.seatNumber || '1';
-            anchor.href = url;
-            anchor.download = `boleto-${eventName}-${seat}.html`;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            try {
+                const response = await fetch(`/api/tickets/${ticket.id}/pdf`, {
+                    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Error ${response.status}: No se pudo generar el PDF`);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                const eventName = (ticket.event?.name || state.event?.name || 'boleto').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                const seat = ticket.seatNumber || '1';
+                anchor.href = url;
+                anchor.download = `boleto-${eventName}-${seat}.pdf`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                notify('Boleto descargado', 'ok');
+            } catch (err) {
+                console.error('Error descargando boleto:', err);
+                notify('Error: ' + err.message, 'err');
+            }
         }
 
         function printTicket(ticketIndex) {
             const ticket = lastPurchasedTickets[ticketIndex];
             if (!ticket) {
+                notify('Boleto no encontrado', 'err');
                 return;
             }
 
-            const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-            if (!printWindow) {
-                notify('El navegador bloqueo la ventana de impresion', 'err');
-                return;
-            }
+            try {
+                const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+                if (!printWindow) {
+                    notify('El navegador bloqueo la ventana de impresion', 'err');
+                    return;
+                }
 
-            printWindow.document.open();
-            printWindow.document.write(buildStandaloneTicketHtml(ticket));
-            printWindow.document.close();
-            printWindow.onload = () => {
-                printWindow.focus();
-                printWindow.print();
-            };
+                const html = buildStandaloneTicketHtml(ticket);
+                printWindow.document.open();
+                printWindow.document.write(html);
+                printWindow.document.close();
+                
+                // Wait a bit for content to load, then print
+                printWindow.onload = () => {
+                    printWindow.focus();
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 500);
+                };
+            } catch (err) {
+                console.error('Error imprimiendo boleto:', err);
+                notify('Error: ' + err.message, 'err');
+            }
         }
 
         function notify(message, kind = 'info') {
