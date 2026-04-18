@@ -1,0 +1,46 @@
+.purchase-main {
+    display: grid;
+    gap: 16px;
+}
+
+.purchase-hero {
+    padding: 24px;
+}
+
+.purchase-auth-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.purchase-auth-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: grid;
+    gap: 10px;
+}
+
+.purchase-auth-card h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.purchase-auth-card input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #d3c8b3;
+    background: #fff;
+}
+
+.purchase-auth-card button {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}

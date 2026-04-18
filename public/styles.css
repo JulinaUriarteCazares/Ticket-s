@@ -1,26 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap');
-
 :root {
-    --bg-0: #ede7d9;
-    --bg-1: #f8f3e8;
+    --bg-0: #f4efe3;
+    --bg-1: #f9f6ef;
     --surface: #fffdf8;
-    --surface-strong: #ffffff;
-    --ink: #161a24;
-    --muted: #5f6675;
-    --line: #dbd3c3;
-    --brand: #df341f;
-    --brand-hover: #c12d1a;
+    --surface-strong: #fff;
+    --ink: #111318;
+    --muted: #646a76;
+    --line: #dbd3c0;
+    --brand: #d8321c;
+    --brand-hover: #b72714;
     --ok: #10663f;
     --warn: #9a6016;
     --err: #932020;
-    --primary: #1a2438;
-    --shadow-1: 0 8px 24px rgba(22, 26, 36, 0.08);
-    --shadow-2: 0 16px 34px rgba(22, 26, 36, 0.14);
-    --radius-lg: 18px;
-    --radius-md: 12px;
-    --radius-pill: 999px;
-    --brand-soft: #f37a53;
-    --focus-ring: rgba(223, 52, 31, 0.18);
+    --primary: #1c2230;
 }
 
 * {
@@ -31,37 +22,11 @@ body {
     margin: 0;
     color: var(--ink);
     background:
-        radial-gradient(circle at 8% 12%, rgba(223, 52, 31, 0.1), transparent 38%),
-        radial-gradient(circle at 92% 8%, rgba(25, 36, 56, 0.11), transparent 33%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1)),
+        radial-gradient(circle at 10% 10%, rgba(216, 50, 28, 0.08), transparent 35%),
+        radial-gradient(circle at 90% 0%, rgba(17, 19, 24, 0.08), transparent 30%),
         linear-gradient(180deg, var(--bg-0), var(--bg-1));
-    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
     min-height: 100vh;
-    position: relative;
-}
-
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.05) 0,
-        rgba(255, 255, 255, 0.05) 1px,
-        transparent 1px,
-        transparent 16px
-    );
-    opacity: 0.35;
-    z-index: -1;
-}
-
-h1,
-h2,
-h3,
-.brand {
-    font-family: "Space Grotesk", "Manrope", sans-serif;
-    letter-spacing: 0.01em;
 }
 
 .hidden {
@@ -76,11 +41,9 @@ h3,
     align-items: center;
     justify-content: space-between;
     padding: 14px 24px;
-    border-bottom: 1px solid #e0d8c6;
-    backdrop-filter: blur(10px);
-    background: rgba(255, 252, 244, 0.78);
-    box-shadow: 0 4px 20px rgba(18, 21, 30, 0.06);
-    border-radius: 0 0 18px 18px;
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(6px);
+    background: rgba(255, 252, 244, 0.9);
 }
 
 .brand {
@@ -90,7 +53,6 @@ h3,
     letter-spacing: 0.04em;
     text-transform: uppercase;
     font-weight: 700;
-    font-size: 15px;
 }
 
 .brand-link {
@@ -104,11 +66,10 @@ h3,
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, #232a3a, #141a28);
+    background: var(--ink);
     color: #fff;
     font-size: 12px;
     font-weight: 700;
-    box-shadow: 0 8px 18px rgba(20, 26, 40, 0.25);
 }
 
 .topbar-right {
@@ -130,15 +91,14 @@ h3,
     font-weight: 700;
     font-size: 12px;
     cursor: pointer;
-    background: linear-gradient(135deg, #232d40, #161d2b);
+    background: var(--ink);
     color: #fff;
-    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 .auth-mini:hover {
     transform: translateY(-1px);
     opacity: 0.92;
-    box-shadow: 0 8px 20px rgba(22, 29, 43, 0.24);
 }
 
 .auth-mini.secondary {
@@ -149,36 +109,31 @@ h3,
 
 .session-pill {
     border-radius: 999px;
-    border: 1px solid #dbd1bc;
+    border: 1px solid var(--line);
     padding: 8px 12px;
     font-size: 12px;
     color: var(--muted);
-    background: #fff;
+    background: var(--surface);
 }
 
 main {
-    width: min(1160px, calc(100% - 20px));
+    width: min(1080px, calc(100% - 20px));
     margin: 24px auto 70px;
-    animation: riseIn 420ms ease;
 }
 
 .hero {
-    background:
-        radial-gradient(circle at 20% 20%, rgba(250, 180, 86, 0.28), transparent 45%),
-        linear-gradient(135deg, #1c2738, #10151f);
+    background: linear-gradient(135deg, #171b23, #111318);
     color: #f7f8fb;
-    border-radius: var(--radius-lg);
-    padding: 28px;
+    border-radius: 18px;
+    padding: 26px;
     margin-bottom: 20px;
-    box-shadow: var(--shadow-2);
+    box-shadow: 0 14px 35px rgba(17, 19, 24, 0.18);
     animation: riseIn 500ms ease;
-    border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .hero h1 {
     margin: 0 0 8px;
     font-size: clamp(24px, 3.7vw, 36px);
-    text-wrap: balance;
 }
 
 .hero p {
@@ -193,7 +148,7 @@ main {
     margin-bottom: 10px;
     padding: 5px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
     color: #f7f8fb;
     font-size: 12px;
     letter-spacing: 0.08em;
@@ -201,9 +156,7 @@ main {
 }
 
 .hero-organizer {
-    background:
-        radial-gradient(circle at 24% 18%, rgba(131, 203, 255, 0.2), transparent 45%),
-        linear-gradient(135deg, #18263b, #10151f);
+    background: linear-gradient(135deg, #1a2331, #111318);
 }
 
 .modal-brand {
@@ -254,7 +207,7 @@ main {
 .section-head h2,
 .section-title-row h2 {
     margin: 0;
-    font-size: 26px;
+    font-size: 24px;
 }
 
 .section-title-actions {
@@ -266,65 +219,50 @@ main {
 .refresh-btn {
     border: 0;
     padding: 10px 14px;
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
     font-weight: 700;
-    background: linear-gradient(135deg, #253047, #1a2336);
+    background: #232b3a;
     color: #fff;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-}
-
-.refresh-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(26, 35, 54, 0.22);
 }
 
 .events-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(295px, 1fr));
-    gap: 18px;
+    gap: 16px;
 }
 
 .event-card {
     background: var(--surface-strong);
     border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    padding: 18px;
-    box-shadow: var(--shadow-1);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
     gap: 12px;
     animation: riseIn 460ms ease both;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.event-card:hover {
-    transform: translateY(-3px);
-    border-color: #cfc4ad;
-    box-shadow: var(--shadow-2);
 }
 
 .event-card h3 {
     margin: 0;
-    font-size: 22px;
-    line-height: 1.15;
+    font-size: 19px;
 }
 
 .event-image {
     width: 100%;
-    height: 184px;
+    height: 170px;
     object-fit: cover;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid #e3dbc9;
     background: #f2ecdf;
 }
 
 .event-image-placeholder {
     width: 100%;
-    height: 184px;
-    border-radius: 12px;
+    height: 170px;
+    border-radius: 10px;
     border: 1px dashed #d7cdbb;
     display: grid;
     place-items: center;
@@ -343,24 +281,17 @@ main {
     width: auto;
     padding: 6px 10px;
     font-size: 12px;
-    border: 1px solid #c9c0ae;
-    background: #f3ebde;
+    border: 1px solid #cfc6b5;
+    background: #f8f2e6;
     color: #2a2f39;
     cursor: pointer;
-    border-radius: 10px;
-    transition: transform 0.15s ease, filter 0.2s ease;
-}
-
-.image-btn:hover {
-    transform: translateY(-1px);
-    filter: brightness(0.98);
 }
 
 .event-meta {
     margin: 0;
     color: var(--muted);
     font-size: 14px;
-    line-height: 1.55;
+    line-height: 1.45;
 }
 
 .purchase-block {
@@ -382,35 +313,16 @@ main {
 .buy-btn {
     margin-top: 0;
     border: 0;
-    background: linear-gradient(135deg, var(--brand), #ba2d18);
+    background: var(--brand);
     color: #fff;
     font-weight: 700;
     cursor: pointer;
-    border-radius: 12px;
-    padding: 11px 14px;
-    box-shadow: 0 10px 22px rgba(201, 45, 25, 0.3);
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+    border-radius: 10px;
+    padding: 10px 12px;
 }
 
 .buy-btn:hover {
-    background: linear-gradient(135deg, var(--brand-hover), #a22513);
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px rgba(188, 44, 24, 0.35);
-}
-
-.buy-btn::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.16) 50%, transparent 80%);
-    transform: translateX(-120%);
-    transition: transform 0.5s ease;
-}
-
-.buy-btn:hover::after {
-    transform: translateX(120%);
+    background: var(--brand-hover);
 }
 
 .buy-btn[disabled],
@@ -424,8 +336,8 @@ main {
     margin-top: 20px;
     border: 1px solid var(--line);
     background: #fffdf8;
-    border-radius: 16px;
-    padding: 16px;
+    border-radius: 14px;
+    padding: 14px;
     display: grid;
     gap: 10px;
 }
@@ -441,7 +353,7 @@ main {
     gap: 10px;
     align-items: center;
     border: 1px solid #e2d9c7;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fff;
     padding: 10px;
 }
@@ -473,22 +385,20 @@ main {
 .panel {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 16px;
-    box-shadow: var(--shadow-1);
-    backdrop-filter: blur(2px);
+    border-radius: 12px;
+    padding: 14px;
 }
 
 .hero-layout {
     display: grid;
     grid-template-columns: 360px minmax(0, 1fr);
-    gap: 14px;
+    gap: 10px;
     align-items: start;
 }
 
 .event-content-column {
     display: grid;
-    gap: 10px;
+    gap: 8px;
 }
 
 .event-media-column {
@@ -508,10 +418,9 @@ main {
     display: grid;
     gap: 6px;
     border: 1px solid #e4dac8;
-    border-radius: 14px;
+    border-radius: 10px;
     background: #fffdf8;
-    padding: 12px 14px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    padding: 8px 10px;
 }
 
 .event-heading-row {
@@ -526,48 +435,37 @@ main {
     border: 1px solid #cfc6b5;
     background: #f8f2e6;
     color: #2a2f39;
-    border-radius: 10px;
-    padding: 7px 11px;
+    border-radius: 8px;
+    padding: 6px 10px;
     font-size: 12px;
     cursor: pointer;
-    font-weight: 700;
 }
 
 .get-tickets-btn {
-    width: min(320px, 100%);
+    width: min(460px, 100%);
     justify-self: start;
-    border: 1px solid #f2b7a9;
-    border-radius: var(--radius-pill);
+    border: 0;
+    border-radius: 12px;
     padding: 12px 20px;
-    font-weight: 800;
-    font-size: clamp(14px, 1.15vw, 16px);
+    font-weight: 700;
+    font-size: clamp(20px, 2.2vw, 34px);
     letter-spacing: 0.01em;
     line-height: 1;
-    text-transform: none;
-    background: linear-gradient(135deg, #e1442b 0%, #c9311c 55%, #aa2615 100%);
+    background: var(--brand);
     color: #fff;
     cursor: pointer;
-    box-shadow: 0 10px 20px rgba(183, 42, 22, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.26);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 48px;
 }
 
 .get-tickets-btn:hover {
-    background: linear-gradient(135deg, #d13a23 0%, #ba2b18 60%, #972111 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 14px 24px rgba(171, 38, 20, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    filter: saturate(1.03);
+    background: var(--brand-hover);
 }
 
 .event-bottom-cta {
     display: flex;
     justify-content: center;
-    margin-top: 14px;
-    margin-bottom: 10px;
-    padding: 0;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    padding: 2px 6px 0;
 }
 
 .event-bottom-cta .get-tickets-btn {
@@ -580,11 +478,10 @@ main {
     min-height: 260px;
     max-height: min(520px, 70vh);
     object-fit: cover;
-    border-radius: 14px;
+    border-radius: 10px;
     border: 1px solid #e4dcca;
     background: #efe7d7;
     display: block;
-    box-shadow: 0 18px 32px rgba(22, 26, 36, 0.18);
 }
 
 .image-corner-plus {
@@ -632,19 +529,10 @@ textarea,
 button,
 select {
     width: 100%;
-    border-radius: 10px;
-    border: 1px solid #cfc6b5;
-    padding: 10px 11px;
+    border-radius: 8px;
+    border: 1px solid #cec5b4;
+    padding: 9px 10px;
     font: inherit;
-}
-
-input:focus,
-textarea:focus,
-select:focus,
-button:focus-visible {
-    outline: 0;
-    border-color: #df7a41;
-    box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .actions {
@@ -659,14 +547,8 @@ button:focus-visible {
     background: var(--primary);
     color: #fff;
     cursor: pointer;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 9px 12px;
-    transition: transform 0.18s ease, box-shadow 0.2s ease;
-}
-
-.actions button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 18px rgba(26, 36, 56, 0.25);
 }
 
 .manager-stack {
@@ -679,9 +561,9 @@ button:focus-visible {
 .ticket-panel,
 .ticket-empty {
     border: 1px solid #e4dac8;
-    border-radius: 14px;
+    border-radius: 10px;
     background: #fffdf8;
-    padding: 12px;
+    padding: 8px;
     display: grid;
     gap: 8px;
 }
@@ -700,7 +582,7 @@ button:focus-visible {
 .ticket-summary,
 .ticket-empty {
     margin: 0;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--muted);
 }
 
@@ -734,7 +616,7 @@ button:focus-visible {
 .event-modal-panel {
     width: min(760px, 100%);
     background: #fffdf8;
-    border-radius: 16px;
+    border-radius: 14px;
     border: 1px solid #dfd5c3;
     box-shadow: 0 20px 48px rgba(0, 0, 0, 0.26);
     padding: 14px;
@@ -812,18 +694,12 @@ button:focus-visible {
 
 .ticket-card {
     border: 1px solid #e4dac8;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fff;
-    padding: 10px;
+    padding: 8px;
     display: grid;
     gap: 6px;
-    box-shadow: 0 10px 22px rgba(22, 26, 36, 0.08);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ticket-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 14px 26px rgba(22, 26, 36, 0.12);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.04);
 }
 
 .ticket-card h3 {
@@ -836,11 +712,10 @@ button:focus-visible {
     align-self: start;
     padding: 4px 9px;
     border-radius: 999px;
-    background: #efe7d8;
+    background: #f3eee3;
     border: 1px solid #ddd3c0;
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.03em;
 }
 
 .ticket-stats {
@@ -854,9 +729,9 @@ button:focus-visible {
 }
 
 .ticket-stat {
-    background: #fff8eb;
+    background: #fffaf0;
     border: 1px solid #e7dcc7;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 6px 8px;
 }
 
@@ -869,8 +744,7 @@ button:focus-visible {
 .ticket-stat strong {
     display: block;
     margin-top: 2px;
-    font-size: 16px;
-    color: #1e2532;
+    font-size: 12px;
 }
 
 .ticket-card .actions {
@@ -924,10 +798,10 @@ button:focus-visible {
 
 .checkout-head {
     border: 1px solid #e4dac8;
-    border-radius: 12px;
-    padding: 10px;
+    border-radius: 10px;
+    padding: 8px;
     background: #fff7ea;
-    color: #5f5644;
+    color: #6f6450;
     font-size: 12px;
     font-weight: 700;
 }
@@ -939,10 +813,9 @@ button:focus-visible {
 
 .checkout-row {
     border: 1px solid #e4dac8;
-    border-radius: 12px;
-    padding: 10px;
+    border-radius: 10px;
+    padding: 8px;
     background: #fff;
-    box-shadow: 0 8px 18px rgba(20, 24, 34, 0.06);
 }
 
 .checkout-row strong {
@@ -1003,26 +876,12 @@ button:focus-visible {
 .auth-panel {
     width: min(430px, 100%);
     background: #0d1020;
-    border-radius: 18px;
+    border-radius: 16px;
     padding: 22px;
-    border: 1px solid #27335f;
-    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+    border: 1px solid #20284b;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
     animation: popIn 220ms ease;
     color: #e6ebff;
-    position: relative;
-    overflow: hidden;
-}
-
-.auth-panel::before {
-    content: "";
-    position: absolute;
-    width: 220px;
-    height: 220px;
-    right: -80px;
-    top: -80px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(69, 225, 213, 0.28), transparent 68%);
-    pointer-events: none;
 }
 
 .auth-panel h3 {
@@ -1126,16 +985,10 @@ button:focus-visible {
     border: 2px solid #b9c1dd;
     background: transparent;
     color: #d6ddf6;
-    border-radius: 14px;
+    border-radius: 12px;
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    transition: transform 0.2s ease, filter 0.2s ease;
-}
-
-.icon-close:hover {
-    transform: rotate(6deg);
-    filter: brightness(1.08);
 }
 
 .auth-actions {
@@ -1146,7 +999,7 @@ button:focus-visible {
 }
 
 .action-primary {
-    background: linear-gradient(135deg, #45e1d5, #36c1b7);
+    background: #45e1d5;
     color: #051016;
     border: 0;
     font-weight: 700;
@@ -1178,7 +1031,7 @@ button:focus-visible {
 }
 
 .toast {
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid;
     padding: 10px 12px;
     font-size: 14px;
@@ -1250,14 +1103,6 @@ button:focus-visible {
     .ticket-list {
         grid-template-columns: 1fr;
     }
-
-    .event-card {
-        padding: 16px;
-    }
-
-    .event-card h3 {
-        font-size: 20px;
-    }
 }
 
 @media (max-width: 880px) {
@@ -1302,16 +1147,8 @@ button:focus-visible {
     .get-tickets-btn,
     .event-bottom-cta .get-tickets-btn {
         width: 100%;
-        font-size: 15px;
-        letter-spacing: 0.01em;
-        padding: 11px 14px;
-        min-height: 44px;
+        font-size: 24px;
     }
-
-    .hero {
-        padding: 22px;
-    }
-
 }
 
 @media (max-width: 650px) {

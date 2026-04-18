@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle de Evento</title>
-    <link rel="stylesheet" href="/event.css">
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <header class="topbar">
@@ -353,8 +353,13 @@
                     <span class="ticket-badge">${type.type_name}</span>
                     <h3>$${Number(type.price).toFixed(2)}</h3>
                     <div class="ticket-stats ${viewer ? 'ticket-stats-simple' : ''}">
-                        <div class="ticket-stat"><span>Quedan</span><strong>${Number(type.remaining)}</strong></div>
+                        <div class="ticket-stat"><span>Disponibles</span><strong>${Number(type.remaining)}</strong></div>
+                        ${editable
+                            ? `<div class="ticket-stat"><span>Capacidad</span><strong>${Number(type.capacity)}</strong></div>`
+                            : `<div class="ticket-stat"><span>Precio</span><strong>$${Number(type.price).toFixed(2)}</strong></div>`
+                        }
                     </div>
+                    ${editable ? `<div class="ticket-stat"><span>Vendidos</span><strong>${Number(type.sold || 0)}</strong></div>` : ''}
                     ${editable ? `
                         <div class="actions">
                             <button type="button" data-edit-ticket-type="${type.id}">Editar</button>
@@ -664,8 +669,8 @@
             try {
                 await apiCall('PUT', `/events/${state.eventId}`, payload);
                 notify('Evento actualizado', 'ok');
-                await loadEvent();
                 closeEventEditorModal();
+                await loadEvent();
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -815,9 +820,7 @@
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
         imagePicker.addEventListener('change', handleImageSelection);
         goToCheckout.addEventListener('click', () => {
-            state.checkoutOpen = true;
-            renderEvent();
-            ticketCheckoutSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            window.location.href = `/purchase.html?id=${encodeURIComponent(state.eventId)}`;
         });
         document.getElementById('createTicketType').addEventListener('click', createTicketType);
         document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);

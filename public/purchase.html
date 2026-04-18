@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compra de boletos</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/purchase.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand brand-link" href="/" aria-label="Ir al inicio">
+            <div class="brand-mark">TM</div>
+            <span>Compra de boletos</span>
+        </a>
+        <div class="actions">
+            <button id="backToEvent" type="button">Volver al evento</button>
+        </div>
+    </header>
+
+    <main class="purchase-main">
+        <section class="panel purchase-hero">
+            <h1 id="purchaseEventName" class="title">Cargando evento...</h1>
+            <p id="purchaseEventMeta" class="meta"></p>
+            <p id="purchaseEventDescription" class="meta"></p>
+        </section>
+
+        <section id="authPanel" class="panel purchase-auth hidden">
+            <div class="purchase-auth-grid">
+                <article class="purchase-auth-card">
+                    <h2>Iniciar sesion</h2>
+                    <input id="loginEmail" type="email" placeholder="Correo electronico">
+                    <input id="loginPassword" type="password" placeholder="Contrasena">
+                    <button id="doLogin" type="button">Entrar</button>
+                </article>
+
+                <article class="purchase-auth-card">
+                    <h2>Crear cuenta</h2>
+                    <input id="registerName" type="text" placeholder="Nombre de usuario">
+                    <input id="registerEmail" type="email" placeholder="Correo electronico">
+                    <input id="registerPassword" type="password" placeholder="Contrasena">
+                    <button id="doRegister" type="button">Registrarme</button>
+                </article>
+            </div>
+        </section>
+
+        <section id="buyerOnlyMessage" class="panel hidden">
+            <h2>Acceso restringido</h2>
+            <p class="ticket-summary">Solo los usuarios con rol usuario pueden comprar boletos.</p>
+        </section>
+
+        <section id="checkoutPanel" class="panel ticket-checkout hidden">
+            <div class="section-title-row">
+                <div>
+                    <h2>Selecciona tus boletos</h2>
+                    <p class="ticket-summary">Agrega boletos al carrito desde este apartado.</p>
+                </div>
+            </div>
+            <div class="checkout-head">
+                <span>Tipo</span>
+                <span>Precio</span>
+                <span>Disponibles</span>
+                <span>Cantidad</span>
+                <span>Accion</span>
+            </div>
+            <div id="checkoutRows" class="checkout-rows"></div>
+        </section>
+
+        <section id="cartPanel" class="panel ticket-panel hidden">
+            <div class="section-title-row">
+                <div>
+                    <h2>Carrito</h2>
+                    <p class="ticket-summary">Revisa el total y confirma tu compra.</p>
+                </div>
+                <div class="section-title-actions">
+                    <button id="clearCart" class="image-btn" type="button">Vaciar</button>
+                </div>
+            </div>
+            <div id="cartItems" class="cart-list"></div>
+            <div class="cart-footer">
+                <strong id="cartTotal">Total: $0.00</strong>
+                <button id="checkoutCart" class="buy-btn" type="button">Comprar carrito</button>
+            </div>
+        </section>
+    </main>
+
+    <div id="toastRoot" class="toasts"></div>
+
+    <script>
+        const state = {
+            token: localStorage.getItem('tm_token') || null,
+            user: null,
+            eventId: null,
+            event: null,
+            cart: [],
+        };
+
+        const authPanel = document.getElementById('authPanel');
+        const checkoutPanel = document.getElementById('checkoutPanel');
+        const cartPanel = document.getElementById('cartPanel');
+        const buyerOnlyMessage = document.getElementById('buyerOnlyMessage');
+        const checkoutRows = document.getElementById('checkoutRows');
+        const cartItems = document.getElementById('cartItems');
+        const cartTotal = document.getElementById('cartTotal');
+
+        function notify(message, kind = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${kind}`;
+            toast.textContent = message;
+            document.getElementById('toastRoot').appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        function parseUserFromToken(token) {
+            if (!token) {
+                return null;
+            }
+
+            try {
+                const payload = token.split('.')[1];
+                const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const json = atob(normalized);
+                const data = JSON.parse(json);
+                if (!data || !data.id || !data.role) {
+                    return null;
+                }
+                return { id: data.id, role: data.role, name: data.role };
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function isBuyer() {
+            return state.user && state.user.role === 'user';
+        }
+
+        async function apiCall(method, url, body = null, withPrefix = true) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (state.token) {
+                headers.Authorization = `Bearer ${state.token}`;
+            }
+
+            const targetUrl = withPrefix ? `/api${url}` : url;
+            const res = await fetch(targetUrl, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null
+            });
+
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (err) {
+                data = {};
+            }
+
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo completar la accion');
+            }
+
+            return data;
+        }
+
+        function formatDate(dateText, timeText) {
+            if (!dateText) {
+                return 'Fecha por confirmar';
+            }
+            const date = new Date(dateText);
+            const safeDate = Number.isNaN(date.getTime()) ? dateText : date.toLocaleDateString('es-MX');
+            return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
+        }
+
+        function getTicketTypeById(ticketTypeId) {
+            return (state.event?.ticketTypes || []).find((type) => String(type.id) === String(ticketTypeId)) || null;
+        }
+
+        function getCartReservedQty(ticketTypeId) {
+            return state.cart
+                .filter((item) => String(item.ticketTypeId) === String(ticketTypeId))
+                .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        }
+
+        function renderEventHeader() {
+            const event = state.event;
+            if (!event) {
+                return;
+            }
+            document.getElementById('purchaseEventName').textContent = event.name || 'Evento';
+            document.getElementById('purchaseEventMeta').textContent = `${formatDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
+            document.getElementById('purchaseEventDescription').textContent = event.description || 'Sin descripcion';
+            document.title = `Compra | ${event.name || 'Evento'}`;
+        }
+
+        function renderCheckoutRows() {
+            if (!state.event || !isBuyer()) {
+                checkoutRows.innerHTML = '';
+                return;
+            }
+
+            const rows = (state.event.ticketTypes || [])
+                .map((type) => {
+                    const available = Number(type.capacity) - Number(type.sold || 0);
+                    const reserved = getCartReservedQty(type.id);
+                    const remaining = Math.max(available - reserved, 0);
+                    return { ...type, available, remaining };
+                })
+                .filter((type) => type.remaining > 0);
+
+            if (!rows.length) {
+                checkoutRows.innerHTML = '<div class="empty">No hay boletos disponibles para este evento.</div>';
+                return;
+            }
+
+            checkoutRows.innerHTML = rows.map((type) => `
+                <div class="checkout-row">
+                    <strong>${type.type_name}</strong>
+                    <span>$${Number(type.price).toFixed(2)}</span>
+                    <span>${Number(type.remaining)}</span>
+                    <input type="number" min="1" max="${Number(type.remaining)}" value="1" data-qty="${type.id}">
+                    <button class="buy-btn" type="button" data-add="${type.id}">Agregar</button>
+                </div>
+            `).join('');
+        }
+
+        function renderCart() {
+            if (!isBuyer()) {
+                cartItems.innerHTML = '';
+                cartTotal.textContent = 'Total: $0.00';
+                return;
+            }
+
+            if (!state.cart.length) {
+                cartItems.innerHTML = '<div class="empty">No has agregado boletos al carrito.</div>';
+                cartTotal.textContent = 'Total: $0.00';
+                return;
+            }
+
+            let total = 0;
+            cartItems.innerHTML = state.cart.map((item) => {
+                const subtotal = Number(item.unitPrice) * Number(item.quantity);
+                total += subtotal;
+
+                return `
+                    <article class="cart-item">
+                        <div>
+                            <h3>${item.typeName}</h3>
+                            <p class="event-meta">${Number(item.quantity)} x $${Number(item.unitPrice).toFixed(2)}</p>
+                        </div>
+                        <div class="cart-item-actions">
+                            <input class="cart-qty-input" data-cart-qty-id="${item.ticketTypeId}" type="number" min="1" max="${item.maxAvailable}" value="${item.quantity}">
+                            <strong>$${subtotal.toFixed(2)}</strong>
+                            <button class="image-btn" data-remove="${item.ticketTypeId}" type="button">Quitar</button>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+
+            cartTotal.textContent = `Total: $${total.toFixed(2)}`;
+        }
+
+        function renderAccess() {
+            const hasSession = Boolean(state.token && state.user);
+            const buyer = isBuyer();
+
+            authPanel.classList.toggle('hidden', hasSession);
+            buyerOnlyMessage.classList.toggle('hidden', !hasSession || buyer);
+            checkoutPanel.classList.toggle('hidden', !buyer);
+            cartPanel.classList.toggle('hidden', !buyer);
+
+            renderCheckoutRows();
+            renderCart();
+        }
+
+        function addToCart(ticketTypeId, qty) {
+            const ticketType = getTicketTypeById(ticketTypeId);
+            if (!ticketType) {
+                notify('Tipo de boleto no encontrado', 'err');
+                return;
+            }
+
+            const available = Number(ticketType.capacity) - Number(ticketType.sold || 0);
+            const reserved = getCartReservedQty(ticketTypeId);
+            const realAvailable = available - reserved;
+            if (realAvailable < qty) {
+                notify(`Solo hay ${Math.max(realAvailable, 0)} boletos disponibles para ${ticketType.type_name}`, 'err');
+                return;
+            }
+
+            const existing = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId));
+            if (existing) {
+                existing.quantity += qty;
+                existing.maxAvailable = available;
+            } else {
+                state.cart.push({
+                    ticketTypeId: ticketType.id,
+                    typeName: ticketType.type_name,
+                    unitPrice: Number(ticketType.price),
+                    quantity: qty,
+                    maxAvailable: available,
+                });
+            }
+
+            notify('Boleto agregado al carrito', 'ok');
+            renderCheckoutRows();
+            renderCart();
+        }
+
+        function removeCartItem(ticketTypeId) {
+            state.cart = state.cart.filter((item) => String(item.ticketTypeId) !== String(ticketTypeId));
+            renderCheckoutRows();
+            renderCart();
+        }
+
+        function updateCartItemQuantity(ticketTypeId, value) {
+            const item = state.cart.find((cartItem) => String(cartItem.ticketTypeId) === String(ticketTypeId));
+            if (!item) {
+                return;
+            }
+
+            const qty = Number(value);
+            if (!Number.isInteger(qty) || qty < 1) {
+                item.quantity = 1;
+            } else {
+                item.quantity = Math.min(qty, Number(item.maxAvailable || qty));
+            }
+
+            renderCheckoutRows();
+            renderCart();
+        }
+
+        async function checkoutCart() {
+            if (!state.cart.length) {
+                notify('El carrito esta vacio', 'err');
+                return;
+            }
+
+            let success = 0;
+            let failed = 0;
+
+            for (const item of state.cart) {
+                try {
+                    await apiCall('POST', '/tickets/purchase', {
+                        ticket_type_id: item.ticketTypeId,
+                        quantity: item.quantity,
+                    });
+                    success += 1;
+                } catch (err) {
+                    failed += 1;
+                }
+            }
+
+            state.cart = [];
+
+            if (success > 0) {
+                notify('Compra completada', 'ok');
+            }
+            if (failed > 0) {
+                notify(`No se pudieron comprar ${failed} elementos del carrito`, 'err');
+            }
+
+            await loadEvent();
+        }
+
+        async function loginHandler() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                notify('Completa correo y contrasena', 'err');
+                return;
+            }
+
+            try {
+                const data = await apiCall('POST', '/auth/login', { email, password });
+                localStorage.setItem('tm_token', data.token);
+                state.token = data.token;
+                state.user = parseUserFromToken(data.token);
+                notify('Sesion iniciada', 'ok');
+                renderAccess();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function registerHandler() {
+            const name = document.getElementById('registerName').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+
+            if (!name || !email || !password) {
+                notify('Completa nombre, correo y contrasena', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+                notify('Cuenta creada. Inicia sesion para continuar', 'ok');
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function loadEvent() {
+            const event = await apiCall('GET', `/events/${state.eventId}`);
+            const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
+            state.event = { ...event, ticketTypes };
+            renderEventHeader();
+            renderAccess();
+        }
+
+        async function init() {
+            const params = new URLSearchParams(window.location.search);
+            const eventId = params.get('id');
+            if (!eventId) {
+                notify('Falta el id del evento', 'err');
+                return;
+            }
+
+            state.eventId = eventId;
+            state.user = parseUserFromToken(state.token);
+            document.getElementById('backToEvent').addEventListener('click', () => {
+                window.location.href = `/event.html?id=${encodeURIComponent(state.eventId)}`;
+            });
+            document.getElementById('doLogin').addEventListener('click', loginHandler);
+            document.getElementById('doRegister').addEventListener('click', registerHandler);
+            document.getElementById('clearCart').addEventListener('click', () => {
+                state.cart = [];
+                renderCheckoutRows();
+                renderCart();
+            });
+            document.getElementById('checkoutCart').addEventListener('click', checkoutCart);
+
+            checkoutRows.addEventListener('click', (event) => {
+                const addButton = event.target.closest('[data-add]');
+                if (!addButton) {
+                    return;
+                }
+
+                const ticketTypeId = addButton.getAttribute('data-add');
+                const qtyInput = checkoutRows.querySelector(`[data-qty="${ticketTypeId}"]`);
+                const qty = Number(qtyInput ? qtyInput.value : 1);
+                if (!Number.isInteger(qty) || qty < 1) {
+                    notify('Cantidad invalida', 'err');
+                    return;
+                }
+
+                addToCart(ticketTypeId, qty);
+            });
+
+            cartItems.addEventListener('click', (event) => {
+                const removeButton = event.target.closest('[data-remove]');
+                if (!removeButton) {
+                    return;
+                }
+
+                removeCartItem(removeButton.getAttribute('data-remove'));
+            });
+
+            cartItems.addEventListener('change', (event) => {
+                const qtyInput = event.target.closest('[data-cart-qty-id]');
+                if (!qtyInput) {
+                    return;
+                }
+
+                updateCartItemQuantity(qtyInput.getAttribute('data-cart-qty-id'), qtyInput.value);
+            });
+
+            try {
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
