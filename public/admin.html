@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ticketmaster Clone</title>
-    <link rel="stylesheet" href="/styles.css">
+    <title>Ticketmaster Clone | Admin</title>
+    <link rel="stylesheet" href="/admin.css">
 </head>
 <body>
     <header class="topbar">
@@ -111,7 +111,7 @@
             adminSummary: { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 },
             adminInsights: []
         };
-        const pageMode = 'user';
+        const pageMode = 'admin';
         document.body.classList.add(`${pageMode}-page`);
 
         const loginModal = document.getElementById('loginModal');

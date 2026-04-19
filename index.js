@@ -9,10 +9,19 @@ const ticketRoutes = require('./routes/tickets');
 const reportRoutes = require('./routes/reports');
 
 const app = express();
+app.disable('x-powered-by');
+
+app.use((req, res, next) => {
+	res.setHeader('X-Content-Type-Options', 'nosniff');
+	res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+	res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+	next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static('public'));  // Sirve archivos estáticos desde la carpeta "public"
+app.use(express.static('public', { dotfiles: 'deny' }));  // Sirve archivos estáticos desde la carpeta "public"
 
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
