@@ -697,6 +697,46 @@ router.get('/my-tickets', auth, async (req, res) => {
   }
 });
 
+// Obtener eventos donde el usuario compró boletos, agrupados
+router.get('/purchased-events', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT e.id, e.name, e.event_date, e.event_time, e.location, e.image_url, e.artist_name
+       FROM tickets t
+       JOIN ticket_types tt ON t.ticket_type_id = tt.id
+       JOIN events e ON tt.event_id = e.id
+       WHERE t.user_id = $1
+       ORDER BY e.event_date DESC`,
+      [req.user.id]
+    );
+    
+    const events = result.rows;
+    
+    // Para cada evento, obtener sus boletos
+    const eventsWithTickets = await Promise.all(
+      events.map(async (event) => {
+        const ticketsResult = await pool.query(
+          `SELECT t.id, t.qr_code, t.seat_number, t.status, t.purchase_date,
+                  tt.type_name, tt.price
+           FROM tickets t
+           JOIN ticket_types tt ON t.ticket_type_id = tt.id
+           WHERE tt.event_id = $1 AND t.user_id = $2
+           ORDER BY t.purchase_date DESC`,
+          [event.id, req.user.id]
+        );
+        return {
+          ...event,
+          tickets: ticketsResult.rows
+        };
+      })
+    );
+    
+    res.json(eventsWithTickets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Validar ticket
 router.put('/validate', auth, async (req, res) => {
   const { qr_code } = req.body;

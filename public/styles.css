@@ -1128,6 +1128,206 @@ select {
     font-size: 28px;
 }
 
+.boletos-panel {
+    width: min(860px, 100%);
+    max-height: 84vh;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.boletos-content {
+    overflow-y: auto;
+    padding: 4px 2px 2px;
+}
+
+.boletos-empty {
+    text-align: center;
+    margin: 8px 2px;
+}
+
+.boletos-list {
+    display: grid;
+    gap: 14px;
+}
+
+.boletos-event-card {
+    border: 1px solid #283158;
+    border-radius: 14px;
+    background: #131830;
+    overflow: hidden;
+}
+
+.boletos-event-header {
+    display: grid;
+    grid-template-columns: 164px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px;
+    cursor: pointer;
+}
+
+.boletos-event-image {
+    width: 100%;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #2e3866;
+    background: #0b0f1f;
+}
+
+.boletos-event-meta {
+    display: grid;
+    gap: 5px;
+}
+
+.boletos-event-meta strong {
+    font-size: 20px;
+    line-height: 1.15;
+}
+
+.boletos-event-meta small {
+    color: #b1bbdf;
+    font-size: 13px;
+}
+
+.boletos-event-badge {
+    justify-self: start;
+    margin-top: 2px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #202a50;
+    color: #d8e2ff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.boletos-toggle {
+    color: #d7e0ff;
+    font-size: 20px;
+    transition: transform 160ms ease;
+}
+
+.boletos-event-tickets {
+    border-top: 1px solid #283158;
+    padding: 12px;
+    display: grid;
+    gap: 12px;
+    background: #0e1327;
+}
+
+.boletos-event-actions-top {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.boletos-download-all {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: #37d67a;
+    color: #062014;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.boletos-download-all:hover {
+    filter: brightness(0.94);
+}
+
+.boletos-tickets-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.boletos-ticket-item {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid #263054;
+    border-radius: 12px;
+    padding: 10px;
+    background: #151c38;
+}
+
+.boletos-ticket-image {
+    width: 92px;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #2f3963;
+    background: #0b1024;
+}
+
+.boletos-ticket-main {
+    display: grid;
+    gap: 4px;
+}
+
+.boletos-ticket-main strong {
+    font-size: 15px;
+}
+
+.boletos-ticket-main small {
+    color: #b8c1de;
+    font-size: 12px;
+}
+
+.boletos-download-single {
+    border: 1px solid #4962c4;
+    background: #293d8b;
+    color: #eff3ff;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.boletos-download-single:hover {
+    filter: brightness(1.08);
+}
+
+.boletos-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px dashed #304070;
+    padding-top: 10px;
+    color: #ced8fa;
+}
+
+.boletos-summary span {
+    font-size: 13px;
+    color: #aab6df;
+}
+
+.boletos-summary strong {
+    font-size: 15px;
+}
+
+.boletos-global-summary {
+    margin-top: 2px;
+    border: 1px solid #2f3b66;
+    border-radius: 14px;
+    padding: 12px;
+    background: #192043;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.boletos-global-summary span {
+    font-size: 13px;
+    color: #bcc7ed;
+}
+
+.boletos-global-summary strong {
+    font-size: 14px;
+    text-align: right;
+}
+
 .switch-note {
     margin: 12px 0 0;
     font-size: 14px;
@@ -1395,6 +1595,42 @@ select {
         min-width: 0;
         font-size: 15px;
         padding: 12px 14px;
+    }
+
+    .boletos-event-header {
+        grid-template-columns: 1fr;
+    }
+
+    .boletos-event-image {
+        height: 160px;
+    }
+
+    .boletos-toggle {
+        justify-self: end;
+    }
+
+    .boletos-ticket-item {
+        grid-template-columns: 1fr;
+    }
+
+    .boletos-ticket-image {
+        width: 100%;
+        height: 146px;
+    }
+
+    .boletos-download-single,
+    .boletos-download-all {
+        width: 100%;
+    }
+
+    .boletos-summary,
+    .boletos-global-summary {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .boletos-global-summary strong {
+        text-align: left;
     }
 }
 

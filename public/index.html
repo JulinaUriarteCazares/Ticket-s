@@ -15,6 +15,7 @@
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
             <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
                 <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
             </div>
             <div class="topbar-actions">
@@ -107,6 +108,18 @@
         </div>
     </div>
 
+    <div id="boletosModal" class="auth-modal" aria-hidden="true">
+        <div class="auth-panel boletos-panel" role="dialog" aria-modal="true" aria-label="Mis boletos">
+            <div class="register-head">
+                <h3>Mis Boletos</h3>
+                <button id="closeBoletosIcon" class="icon-close" type="button" aria-label="Cerrar boletos">X</button>
+            </div>
+            <div id="boletosContent" class="boletos-content">
+                <div class="loader">Cargando boletos...</div>
+            </div>
+        </div>
+    </div>
+
     <div id="toastRoot" class="toasts" aria-live="polite" aria-atomic="true"></div>
 
     <script>
@@ -116,17 +129,23 @@
             events: [],
             showPastOnly: false,
             adminSummary: { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 },
-            adminInsights: []
+            adminInsights: [],
+            boletosCache: null,
+            boletosCacheTime: 0,
+            BOLETOS_CACHE_TTL: 5 * 60 * 1000 // 5 minutos
         };
         const pageMode = 'user';
         document.body.classList.add(`${pageMode}-page`);
 
         const loginModal = document.getElementById('loginModal');
         const registerModal = document.getElementById('registerModal');
+        const boletosModal = document.getElementById('boletosModal');
+        const boletosContent = document.getElementById('boletosContent');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
+        const boletosMenuButton = document.getElementById('boletosMenuButton');
         const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
         const toastRoot = document.getElementById('toastRoot');
@@ -348,7 +367,10 @@
             }
 
             if (!res.ok) {
-                throw new Error(data.error || 'No se pudo completar la accion');
+                const error = new Error(data.error || `HTTP ${res.status}`);
+                error.status = res.status;
+                error.payload = data;
+                throw error;
             }
             return data;
         }
@@ -381,6 +403,17 @@
             clearRegisterForm();
             registerModal.classList.remove('open');
             registerModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function openBoletosModal() {
+            boletosModal.classList.add('open');
+            boletosModal.setAttribute('aria-hidden', 'false');
+            loadBoletosData();
+        }
+
+        function closeBoletosModal() {
+            boletosModal.classList.remove('open');
+            boletosModal.setAttribute('aria-hidden', 'true');
         }
 
         function clearLoginForm() {
@@ -602,6 +635,74 @@
             }
         }
 
+        async function warmBoletosCache() {
+            if (!state.token || !state.user) {
+                return;
+            }
+
+            const now = Date.now();
+            if (state.boletosCache && (now - state.boletosCacheTime < state.BOLETOS_CACHE_TTL)) {
+                return;
+            }
+
+            try {
+                const events = await fetchPurchasedEvents();
+                state.boletosCache = Array.isArray(events) ? events : [];
+                state.boletosCacheTime = Date.now();
+                sessionStorage.setItem('tm_boletos_cache', JSON.stringify(state.boletosCache));
+                sessionStorage.setItem('tm_boletos_cache_time', String(state.boletosCacheTime));
+            } catch (err) {
+                // No interrumpir flujo principal si precarga falla.
+            }
+        }
+
+        function normalizePurchasedEventsFromTickets(tickets) {
+            const groups = new Map();
+
+            (Array.isArray(tickets) ? tickets : []).forEach((ticket) => {
+                const key = [ticket.event_name || 'Evento', ticket.event_date || '', ticket.location || ''].join('|');
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        id: key,
+                        name: ticket.event_name || 'Evento',
+                        event_date: ticket.event_date || null,
+                        event_time: null,
+                        location: ticket.location || 'Ubicacion por confirmar',
+                        image_url: null,
+                        tickets: []
+                    });
+                }
+
+                groups.get(key).tickets.push({
+                    id: ticket.id,
+                    qr_code: ticket.qr_code,
+                    seat_number: ticket.seat_number,
+                    status: ticket.status,
+                    purchase_date: ticket.purchase_date,
+                    type_name: ticket.type_name,
+                    price: ticket.price
+                });
+            });
+
+            return Array.from(groups.values()).map((event) => ({
+                ...event,
+                tickets: event.tickets.sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date))
+            }));
+        }
+
+        async function fetchPurchasedEvents() {
+            try {
+                return await apiCall('GET', '/tickets/purchased-events');
+            } catch (err) {
+                try {
+                    const myTickets = await apiCall('GET', '/tickets/my-tickets');
+                    return normalizePurchasedEventsFromTickets(myTickets);
+                } catch (fallbackErr) {
+                    throw fallbackErr?.status ? fallbackErr : err;
+                }
+            }
+        }
+
         async function loginHandler() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
@@ -624,6 +725,7 @@
                 closeLoginModal();
                 notify(`Bienvenido ${result.user.name}`, 'ok');
                 updateTopCartUi();
+                await warmBoletosCache();
                 await loadEvents();
                 await loadAdminInsights();
             } catch (err) {
@@ -671,6 +773,21 @@
                 state.user = parseUserFromToken(state.token);
             }
 
+            const persistedBoletosCache = sessionStorage.getItem('tm_boletos_cache');
+            const persistedBoletosCacheTime = Number(sessionStorage.getItem('tm_boletos_cache_time') || '0');
+            if (persistedBoletosCache && persistedBoletosCacheTime) {
+                try {
+                    const parsed = JSON.parse(persistedBoletosCache);
+                    if (Array.isArray(parsed)) {
+                        state.boletosCache = parsed;
+                        state.boletosCacheTime = persistedBoletosCacheTime;
+                    }
+                } catch (err) {
+                    state.boletosCache = null;
+                    state.boletosCacheTime = 0;
+                }
+            }
+
             try {
                 const myTickets = await apiCall('GET', '/tickets/my-tickets');
                 if (!Array.isArray(myTickets)) {
@@ -683,6 +800,7 @@
                 state.user = null;
             }
             setAuthUi();
+            await warmBoletosCache();
             if (syncRoleRoute()) {
                 return;
             }
@@ -694,6 +812,10 @@
             state.token = null;
             state.user = null;
             state.adminInsights = [];
+            state.boletosCache = null;
+            state.boletosCacheTime = 0;
+            sessionStorage.removeItem('tm_boletos_cache');
+            sessionStorage.removeItem('tm_boletos_cache_time');
             closeSessionMenu();
             setAuthUi();
             updateTopCartUi();
@@ -701,10 +823,183 @@
             notify('Sesion cerrada', 'info');
         }
 
+        async function loadBoletosData() {
+            try {
+                // Verificar caché
+                const now = Date.now();
+                if (state.boletosCache && (now - state.boletosCacheTime < state.BOLETOS_CACHE_TTL)) {
+                    renderBoletosContent(state.boletosCache);
+                    return;
+                }
+
+                // Cargar desde API
+                const events = await fetchPurchasedEvents();
+                if (!Array.isArray(events) || events.length === 0) {
+                    boletosContent.innerHTML = '<div class="empty boletos-empty">No has comprado boletos aun.</div>';
+                    state.boletosCache = [];
+                    state.boletosCacheTime = now;
+                    return;
+                }
+
+                // Cachear resultados
+                state.boletosCache = events;
+                state.boletosCacheTime = now;
+                sessionStorage.setItem('tm_boletos_cache', JSON.stringify(events));
+                sessionStorage.setItem('tm_boletos_cache_time', String(now));
+
+                renderBoletosContent(events);
+            } catch (err) {
+                boletosContent.innerHTML = '<div class="empty boletos-empty">Error cargando boletos.</div>';
+                notify(err.message, 'err');
+            }
+        }
+
+        function renderBoletosContent(events) {
+            if (!Array.isArray(events) || events.length === 0) {
+                boletosContent.innerHTML = '<div class="empty boletos-empty">No has comprado boletos aun.</div>';
+                return;
+            }
+
+            const totalTicketsGlobal = events.reduce((acc, event) => acc + (event.tickets?.length || 0), 0);
+            const totalSpentGlobal = events.reduce((acc, event) => {
+                const subtotal = (event.tickets || []).reduce((sum, ticket) => sum + Number(ticket.price || 0), 0);
+                return acc + subtotal;
+            }, 0);
+
+            let html = '<div class="boletos-list">';
+            events.forEach(event => {
+                const totalTickets = event.tickets ? event.tickets.length : 0;
+                const eventImage = event.image_url || 'https://placehold.co/520x320?text=Evento';
+                const eventTotal = (event.tickets || []).reduce((sum, ticket) => sum + Number(ticket.price || 0), 0);
+
+                html += `
+                    <div class="boletos-event-card" data-event-id="${event.id}">
+                        <div class="boletos-event-header" role="button" tabindex="0" aria-label="Mostrar boletos del evento">
+                            <img src="${eventImage}" alt="${event.name || 'Evento'}" class="boletos-event-image">
+                            <div class="boletos-event-meta">
+                                <strong>${event.name}</strong>
+                                <small>${formatEventDate(event.event_date, event.event_time)}</small>
+                                <small>${event.location || 'Sin ubicacion'}</small>
+                                <span class="boletos-event-badge">${totalTickets} boletos</span>
+                            </div>
+                            <span class="boletos-toggle">▶</span>
+                        </div>
+                        <div class="boletos-event-tickets hidden">
+                            <div class="boletos-event-actions-top">
+                                <button class="boletos-download-all" data-event-id="${event.id}">Descargar todo en PDF (${totalTickets})</button>
+                            </div>
+                            <div class="boletos-tickets-grid">
+                                ${event.tickets.map(ticket => `
+                                    <article class="boletos-ticket-item">
+                                        <img src="${eventImage}" alt="Boleto ${ticket.type_name || ''}" class="boletos-ticket-image">
+                                        <div class="boletos-ticket-main">
+                                            <strong>${ticket.type_name}</strong>
+                                            <small>Asiento: ${ticket.seat_number || 'N/A'}</small>
+                                            <small>QR: ${String(ticket.qr_code || '').slice(0, 12)}...</small>
+                                            <small>Precio: $${Number(ticket.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>
+                                        </div>
+                                        <button class="boletos-download-single" data-ticket-id="${ticket.id}">Descargar PDF</button>
+                                    </article>
+                                `).join('')}
+                            </div>
+                            <div class="boletos-summary">
+                                <span>Resumen</span>
+                                <strong>${totalTickets} boletos · $${eventTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                <footer class="boletos-global-summary">
+                    <span>Total general</span>
+                    <strong>${events.length} eventos · ${totalTicketsGlobal} boletos · $${totalSpentGlobal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </footer>
+            `;
+
+            html += '</div>';
+            boletosContent.innerHTML = html;
+
+            // Event listeners para expandir/contraer
+            document.querySelectorAll('.boletos-event-header').forEach(header => {
+                header.addEventListener('click', function() {
+                    const ticketsDiv = this.closest('.boletos-event-card').querySelector('.boletos-event-tickets');
+                    const toggle = this.querySelector('.boletos-toggle');
+                    ticketsDiv.classList.toggle('hidden');
+                    toggle.style.transform = ticketsDiv.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(90deg)';
+                });
+            });
+
+            // Event listeners para descargar individual
+            document.querySelectorAll('.boletos-download-single').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    const ticketId = this.dataset.ticketId;
+                    try {
+                        const res = await fetch(`/api/tickets/${ticketId}/pdf`, {
+                            method: 'GET',
+                            headers: { 'Authorization': `Bearer ${state.token}` }
+                        });
+                        if (!res.ok) throw new Error('Error descargando boleto');
+                        const blob = await res.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `boleto-${ticketId}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } catch (err) {
+                        notify(err.message, 'err');
+                    }
+                });
+            });
+
+            // Event listeners para descargar todos
+            document.querySelectorAll('.boletos-download-all').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    const eventId = this.dataset.eventId;
+                    const event = events.find(ev => ev.id == eventId);
+                    if (!event || !event.tickets) return;
+                    
+                    try {
+                        const ticketIds = event.tickets.map(t => t.id);
+                        const res = await fetch('/api/tickets/bulk-pdf', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${state.token}`
+                            },
+                            body: JSON.stringify({ ticket_ids: ticketIds })
+                        });
+                        if (!res.ok) throw new Error('Error descargando boletos');
+                        const blob = await res.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `boletos-${event.name}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } catch (err) {
+                        notify(err.message, 'err');
+                    }
+                });
+            });
+        }
+
         cartTopButton.addEventListener('click', openTopCart);
         sessionMenuButton.addEventListener('click', (event) => {
             event.stopPropagation();
             toggleSessionMenu();
+        });
+        boletosMenuButton.addEventListener('click', async () => {
+            closeSessionMenu();
+            openBoletosModal();
         });
         logoutMenuButton.addEventListener('click', async () => {
             await logoutHandler();
@@ -713,6 +1008,7 @@
         registerButton.addEventListener('click', openRegisterModal);
         document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
         document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
+        document.getElementById('closeBoletosIcon').addEventListener('click', closeBoletosModal);
         document.getElementById('openRegisterFromLogin').addEventListener('click', () => {
             closeLoginModal();
             openRegisterModal();
@@ -741,6 +1037,12 @@
         registerModal.addEventListener('click', (event) => {
             if (event.target === registerModal) {
                 closeRegisterModal();
+            }
+        });
+
+        boletosModal.addEventListener('click', (event) => {
+            if (event.target === boletosModal) {
+                closeBoletosModal();
             }
         });
 
