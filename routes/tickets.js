@@ -24,12 +24,13 @@ async function ensureActiveSupport() {
     );
 
     if (check.rows.length > 0) {
+      await pool.query('ALTER TABLE events ALTER COLUMN active SET DEFAULT FALSE');
       activeSupported = true;
       activeSupportChecked = true;
       return true;
     }
 
-    await pool.query('ALTER TABLE events ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE');
+    await pool.query('ALTER TABLE events ADD COLUMN active BOOLEAN NOT NULL DEFAULT FALSE');
     activeSupported = true;
   } catch (err) {
     if (err.code === '42701') {

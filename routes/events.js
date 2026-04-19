@@ -58,12 +58,13 @@ async function ensureActiveSupport() {
     );
 
     if (check.rows.length > 0) {
+      await pool.query('ALTER TABLE events ALTER COLUMN active SET DEFAULT FALSE');
       activeSupported = true;
       activeSupportChecked = true;
       return true;
     }
 
-    await pool.query('ALTER TABLE events ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE');
+    await pool.query('ALTER TABLE events ADD COLUMN active BOOLEAN NOT NULL DEFAULT FALSE');
     activeSupported = true;
   } catch (err) {
     if (err.code === '42701') {
@@ -441,7 +442,7 @@ router.post('/', auth, async (req, res) => {
     if (supportsImage && supportsActive) {
       result = await pool.query(
         `INSERT INTO events (name, location, event_date, event_time, description, capacity, artist_name, artist_fee, organizer_id, image_url, active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE) RETURNING *`,
         [name, location, event_date, event_time, description, capacity, artist_name, artist_fee, req.user.id, image_url]
       );
     } else if (supportsImage) {
@@ -453,7 +454,7 @@ router.post('/', auth, async (req, res) => {
     } else if (supportsActive) {
       result = await pool.query(
         `INSERT INTO events (name, location, event_date, event_time, description, capacity, artist_name, artist_fee, organizer_id, active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE) RETURNING *, NULL::text AS image_url`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE) RETURNING *, NULL::text AS image_url`,
         [name, location, event_date, event_time, description, capacity, artist_name, artist_fee, req.user.id]
       );
     } else {

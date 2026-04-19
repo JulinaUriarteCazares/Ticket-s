@@ -573,6 +573,8 @@
             organizerEventStatus.textContent = `Estado: ${isEventActive(event) ? 'Activo' : 'Inactivo'}`;
             deactivateEventInlineBtn.classList.toggle('hidden', !editable);
             deactivateEventInlineBtn.textContent = isEventActive(event) ? 'Desactivar evento' : 'Reactivar evento';
+            deactivateEventInlineBtn.classList.toggle('is-active', isEventActive(event));
+            deactivateEventInlineBtn.classList.toggle('is-inactive', !isEventActive(event));
             document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
             document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
             if (checkoutViewer) {

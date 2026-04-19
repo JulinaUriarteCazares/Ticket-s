@@ -488,6 +488,26 @@ main {
     cursor: pointer;
 }
 
+.image-btn.is-active {
+    background: #1f8a4c;
+    color: #fff;
+    border-color: #167043;
+}
+
+.image-btn.is-active:hover {
+    background: #186d3d;
+}
+
+.image-btn.is-inactive {
+    background: #c83b2d;
+    color: #fff;
+    border-color: #a83025;
+}
+
+.image-btn.is-inactive:hover {
+    background: #a93024;
+}
+
 .event-meta {
     margin: 0;
     color: var(--muted);
@@ -611,10 +631,11 @@ main {
 
 .event-image-wrap {
     position: relative;
-    display: grid;
+    display: block;
     width: 100%;
     overflow: hidden;
     border-radius: 10px;
+    line-height: 0;
 }
 
 .preview-info {
@@ -700,22 +721,43 @@ main {
 
 .image-corner-plus {
     position: absolute;
-    left: 12px;
-    bottom: 12px;
-    width: 44px;
-    height: 44px;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    width: 58px;
+    height: 58px;
     border-radius: 999px;
     border: 1px solid #d7ccbb;
-    background: #fffaf0;
+    background: rgba(255, 250, 240, 0.96);
     color: #232834;
-    font-size: 26px;
+    font-size: 34px;
     line-height: 1;
     cursor: pointer;
     box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
+    opacity: 0;
+    transform: translate(-50%, -38%) scale(0.88);
+    transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .image-corner-plus:hover {
     background: #f1e7d5;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.event-image-wrap .image-corner-plus {
+    pointer-events: auto;
+}
+
+.event-image-wrap:hover .image-corner-plus,
+.event-image-wrap:focus-within .image-corner-plus {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+}
+
+.event-image-wrap .hero-image,
+.event-image-wrap .event-image-placeholder {
+    display: block;
+    width: 100%;
 }
 
 .title {
@@ -1631,6 +1673,17 @@ select {
 
     .boletos-global-summary strong {
         text-align: left;
+    }
+
+    .image-corner-plus {
+        opacity: 1;
+        left: 14px;
+        top: auto;
+        bottom: 14px;
+        transform: none;
+        width: 44px;
+        height: 44px;
+        font-size: 26px;
     }
 }
 
