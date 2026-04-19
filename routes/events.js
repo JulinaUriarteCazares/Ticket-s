@@ -216,6 +216,7 @@ router.get('/admin/overview', auth, async (req, res) => {
         reports.push({
           id: event.id,
           name: event.name,
+          image_url: event.image_url || null,
           location: event.location,
           event_date: event.event_date,
           event_time: event.event_time,

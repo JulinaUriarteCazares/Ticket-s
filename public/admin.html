@@ -31,14 +31,6 @@
             </p>
         </section>
 
-        <section>
-            <div class="section-head">
-                <h2>Eventos disponibles</h2>
-                <button id="refreshEvents" class="refresh-btn" type="button">Actualizar eventos</button>
-            </div>
-            <div id="eventsRoot" class="events-grid"></div>
-        </section>
-
         <section id="adminInsightsSection" class="hidden">
             <div class="section-head">
                 <h2>Panel de admin</h2>
@@ -121,7 +113,6 @@
         const logoutTopButton = document.getElementById('logoutTopButton');
         const sessionLabel = document.getElementById('sessionLabel');
         const toastRoot = document.getElementById('toastRoot');
-        const eventsRoot = document.getElementById('eventsRoot');
         const adminInsightsSection = document.getElementById('adminInsightsSection');
         const adminStatementRoot = document.getElementById('adminStatementRoot');
         const adminInsightsRoot = document.getElementById('adminInsightsRoot');
@@ -382,8 +373,15 @@
                 const artistFee = Number(event.artist_fee || 0);
                 const totalIncome = Number(event.total_income || 0);
                 const totalGain = totalIncome - artistFee;
+                const openEventId = event.id || event.event_id;
+                const eventFromList = state.events.find((item) => String(item.id) === String(openEventId));
+                const imageSource = event.image_url || eventFromList?.image_url || null;
+                const imageHtml = imageSource
+                    ? `<img class="admin-report-image" src="${imageSource}" alt="Imagen de ${event.name || 'evento'}" loading="lazy">`
+                    : '<div class="event-image-placeholder">Sin imagen</div>';
                 return `
-                    <article class="admin-report-card">
+                    <article class="admin-report-card" data-event-open="${openEventId}">
+                        ${imageHtml}
                         <div class="admin-report-head">
                             <h3>${event.name || 'Evento'}</h3>
                             <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
@@ -396,6 +394,9 @@
                             <div class="admin-metric-item"><span>Total del evento (ventas)</span><strong>$${formatMoney(totalIncome)}</strong></div>
                             <div class="admin-metric-item"><span>Ganancia neta</span><strong>$${formatMoney(totalGain)}</strong></div>
                             <div class="admin-metric-item"><span>Potencial no vendido</span><strong>$${formatMoney(event.unsold_potential)}</strong></div>
+                        </div>
+                        <div class="admin-report-footer">
+                            <button class="image-btn" type="button" data-event-open="${openEventId}">Ver informe</button>
                         </div>
                     </article>
                 `;
@@ -412,62 +413,28 @@
             adminInsightsRoot.innerHTML = '<div class="loader">Cargando panel admin...</div>';
             try {
                 const payload = await apiCall('GET', '/events/admin/overview');
-                state.adminInsights = Array.isArray(payload.reports) ? payload.reports : [];
+                const reports = Array.isArray(payload.reports) ? payload.reports : [];
+
+                // Fallback robusto: cruza imagenes desde el listado normal de eventos por id.
+                try {
+                    const events = await apiCall('GET', '/events');
+                    const imageById = new Map((Array.isArray(events) ? events : []).map((event) => [String(event.id), event.image_url || null]));
+                    state.events = Array.isArray(events) ? events : [];
+                    state.adminInsights = reports.map((report) => {
+                        const reportId = String(report.id || report.event_id || '');
+                        return {
+                            ...report,
+                            image_url: report.image_url || imageById.get(reportId) || null,
+                        };
+                    });
+                } catch (imageFallbackErr) {
+                    state.adminInsights = reports;
+                }
+
                 state.adminSummary = payload.summary || { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 };
                 renderAdminInsights();
             } catch (err) {
                 adminInsightsRoot.innerHTML = '<div class="empty">No se pudo cargar el panel admin.</div>';
-                notify(err.message, 'err');
-            }
-        }
-
-        function renderEvents() {
-            eventsRoot.innerHTML = '';
-
-            if (!state.events.length) {
-                const empty = document.createElement('div');
-                empty.className = 'empty';
-                empty.textContent = 'No hay eventos disponibles por ahora.';
-                eventsRoot.appendChild(empty);
-                return;
-            }
-
-            state.events.forEach((event) => {
-                const card = document.createElement('article');
-                card.className = 'event-card';
-                card.setAttribute('data-event-open', event.id);
-                const active = isEventActive(event);
-
-                const imageHtml = event.image_url
-                    ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
-                    : '<div class="event-image-placeholder">Sin imagen</div>';
-
-                const managerControls = `
-                    <div class="event-card-actions">
-                        <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
-                    </div>
-                `;
-
-                card.innerHTML = `
-                    ${imageHtml}
-                    <h3>${event.name}</h3>
-                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
-                    ${managerControls}
-                `;
-
-                eventsRoot.appendChild(card);
-            });
-        }
-
-        async function loadEvents() {
-            eventsRoot.innerHTML = '<div class="loader">Cargando eventos...</div>';
-            try {
-                const events = await apiCall('GET', '/events');
-                state.events = events;
-                renderEvents();
-                notify('Eventos actualizados correctamente', 'ok');
-            } catch (err) {
-                eventsRoot.innerHTML = '<div class="empty">No se pudieron cargar los eventos.</div>';
                 notify(err.message, 'err');
             }
         }
@@ -493,7 +460,6 @@
                 setAuthUi();
                 closeLoginModal();
                 notify(`Bienvenido ${result.user.name}`, 'ok');
-                await loadEvents();
                 await loadAdminInsights();
             } catch (err) {
                 notify(err.message, 'err');
@@ -564,7 +530,6 @@
             state.user = null;
             state.adminInsights = [];
             setAuthUi();
-            await loadEvents();
             notify('Sesion cerrada', 'info');
         }
 
@@ -583,10 +548,6 @@
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
-        document.getElementById('refreshEvents').addEventListener('click', async () => {
-            await loadEvents();
-            await loadAdminInsights();
-        });
 
         loginModal.addEventListener('click', (event) => {
             if (event.target === loginModal) {
@@ -600,7 +561,7 @@
             }
         });
 
-        eventsRoot.addEventListener('click', (event) => {
+        adminInsightsRoot.addEventListener('click', (event) => {
             const card = event.target.closest('[data-event-open]');
             if (!card) {
                 return;
@@ -611,9 +572,8 @@
 
         (async function init() {
             await restoreSession();
-            await loadEvents();
             await loadAdminInsights();
-            notify('Inicio listo para comprar boletos', 'info');
+            notify('Panel admin listo', 'info');
         })();
     </script>
 </body>
