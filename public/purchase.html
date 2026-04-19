@@ -27,6 +27,7 @@
     </header>
 
     <main class="purchase-main">
+        <button id="purchaseCloseToHome" class="purchase-close-home" type="button" aria-label="Volver al inicio">X</button>
         <section class="panel purchase-hero">
             <h1 id="purchaseEventName" class="title">Cargando evento...</h1>
             <p id="purchaseEventMeta" class="meta"></p>
@@ -117,6 +118,7 @@
         const checkoutRows = document.getElementById('checkoutRows');
         const cartItems = document.getElementById('cartItems');
         const cartTotal = document.getElementById('cartTotal');
+        const purchaseCloseToHome = document.getElementById('purchaseCloseToHome');
         const clearCartButton = document.getElementById('clearCart');
         const checkoutCartButton = document.getElementById('checkoutCart');
         const purchaseSuccessBanner = document.getElementById('purchaseSuccessBanner');
@@ -126,6 +128,7 @@
         const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
         const downloadAllTicketsButton = document.getElementById('downloadAllTickets');
         const cartStorageStatus = document.getElementById('cartStorageStatus');
+        const cartStorageWrap = document.querySelector('.purchase-cart-storage');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
         const logoutMenuButton = document.getElementById('logoutMenuButton');
@@ -134,18 +137,28 @@
         const registerButton = document.getElementById('registerButton');
         let lastPurchasedTickets = [];
 
-        function getCartStorageKeyByUserId(userId) {
-            const owner = userId ? `user_${userId}` : 'guest';
-            return `tm_cart_v1_${owner}_event_${state.eventId || 'unknown'}`;
+        function getCartOwner(userId = state.user?.id || null) {
+            return userId ? `user_${userId}` : 'guest';
         }
 
-        function getCartStorageKey() {
-            return getCartStorageKeyByUserId(state.user?.id || null);
+        function getCartPrefixByUserId(userId) {
+            return `tm_cart_v1_${getCartOwner(userId)}_event_`;
+        }
+
+        function getCartStorageKeyByUserId(userId, eventId = state.eventId || 'unknown') {
+            return `${getCartPrefixByUserId(userId)}${eventId}`;
+        }
+
+        function extractEventIdFromCartKey(key, userId = state.user?.id || null) {
+            const prefix = getCartPrefixByUserId(userId);
+            if (!key || !key.startsWith(prefix)) {
+                return null;
+            }
+            return key.slice(prefix.length) || null;
         }
 
         function getCartSummary(onlyCurrentEvent = false) {
-            const owner = state.user?.id ? `user_${state.user.id}` : 'guest';
-            const prefix = `tm_cart_v1_${owner}_event_`;
+            const prefix = getCartPrefixByUserId(state.user?.id || null);
             let totalQty = 0;
             const eventIds = [];
 
@@ -155,7 +168,7 @@
                     continue;
                 }
 
-                const eventId = key.slice(prefix.length);
+                const eventId = extractEventIdFromCartKey(key, state.user?.id || null);
                 if (onlyCurrentEvent && String(eventId) !== String(state.eventId || '')) {
                     continue;
                 }
@@ -175,6 +188,41 @@
             }
 
             return { totalQty, eventIds };
+        }
+
+        function getPreferredCartEventId() {
+            const prefix = getCartPrefixByUserId(state.user?.id || null);
+            let preferredEventId = null;
+            let preferredQty = 0;
+
+            for (let index = 0; index < localStorage.length; index += 1) {
+                const key = localStorage.key(index);
+                if (!key || !key.startsWith(prefix)) {
+                    continue;
+                }
+
+                const eventId = extractEventIdFromCartKey(key, state.user?.id || null);
+                if (!eventId) {
+                    continue;
+                }
+
+                try {
+                    const cart = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (!Array.isArray(cart)) {
+                        continue;
+                    }
+
+                    const qty = cart.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+                    if (qty > preferredQty) {
+                        preferredQty = qty;
+                        preferredEventId = eventId;
+                    }
+                } catch (err) {
+                    continue;
+                }
+            }
+
+            return preferredEventId;
         }
 
         function updateTopCartUi() {
@@ -223,13 +271,13 @@
 
         function openTopCart() {
             const summary = getCartSummary();
+            const targetEventId = getPreferredCartEventId();
 
-            if (!summary.totalQty || !summary.eventIds.length) {
+            if (!summary.totalQty || !targetEventId) {
                 notify('Tu carrito esta en 0. Agrega boletos desde un evento.', 'info');
                 return;
             }
 
-            const targetEventId = summary.eventIds[0];
             window.location.href = `/purchase.html?id=${encodeURIComponent(targetEventId)}`;
         }
 
@@ -245,20 +293,22 @@
             notify('Sesion cerrada', 'info');
         }
 
-        function normalizeCart(rawCart) {
+        function normalizeCart(rawCart, fallbackEventId = null) {
             if (!Array.isArray(rawCart)) {
                 return [];
             }
 
             return rawCart
                 .map((item) => ({
+                    eventId: String(item?.eventId || fallbackEventId || ''),
+                    eventName: String(item?.eventName || ''),
                     ticketTypeId: item?.ticketTypeId,
                     typeName: String(item?.typeName || 'Boleto'),
                     unitPrice: Number(item?.unitPrice || 0),
                     quantity: Number(item?.quantity || 1),
                     maxAvailable: Number(item?.maxAvailable || 1),
                 }))
-                .filter((item) => item.ticketTypeId)
+                .filter((item) => item.ticketTypeId && item.eventId)
                 .map((item) => ({
                     ...item,
                     quantity: Number.isInteger(item.quantity) && item.quantity > 0 ? item.quantity : 1,
@@ -267,26 +317,50 @@
         }
 
         function updateCartStorageStatus() {
-            if (!cartStorageStatus) {
+            if (!cartStorageStatus || !cartStorageWrap) {
                 return;
             }
 
             if (!state.cart.length) {
-                cartStorageStatus.textContent = 'No tienes boletos guardados en el carrito para este evento.';
+                cartStorageWrap.classList.add('hidden');
+                cartStorageStatus.textContent = '';
                 return;
             }
 
+            cartStorageWrap.classList.remove('hidden');
             const itemCount = state.cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-            cartStorageStatus.textContent = `Carrito guardado automaticamente: ${itemCount} boleto(s) listos para retomar.`;
+            const eventCount = new Set(state.cart.map((item) => String(item.eventId))).size;
+            cartStorageStatus.textContent = `Carrito guardado automaticamente: ${itemCount} boleto(s) en ${eventCount} evento(s), listos para retomar.`;
         }
 
         function saveCartToStorage() {
-            if (!state.eventId) {
-                return;
-            }
-
             try {
-                localStorage.setItem(getCartStorageKey(), JSON.stringify(state.cart));
+                const ownerId = state.user?.id || null;
+                const prefix = getCartPrefixByUserId(ownerId);
+
+                for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+                    const key = localStorage.key(index);
+                    if (key && key.startsWith(prefix)) {
+                        localStorage.removeItem(key);
+                    }
+                }
+
+                const grouped = new Map();
+                state.cart.forEach((item) => {
+                    const eventId = String(item.eventId || '');
+                    if (!eventId) {
+                        return;
+                    }
+                    if (!grouped.has(eventId)) {
+                        grouped.set(eventId, []);
+                    }
+                    grouped.get(eventId).push(item);
+                });
+
+                grouped.forEach((items, eventId) => {
+                    const key = getCartStorageKeyByUserId(ownerId, eventId);
+                    localStorage.setItem(key, JSON.stringify(items));
+                });
             } catch (err) {
                 console.error('No se pudo guardar el carrito:', err);
             }
@@ -295,12 +369,18 @@
         }
 
         function clearSavedCart() {
-            if (!state.eventId) {
-                return;
-            }
-
             try {
-                localStorage.removeItem(getCartStorageKey());
+                const userPrefix = getCartPrefixByUserId(state.user?.id || null);
+                const guestPrefix = getCartPrefixByUserId(null);
+                for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+                    const key = localStorage.key(index);
+                    if (!key) {
+                        continue;
+                    }
+                    if (key.startsWith(userPrefix) || (state.user?.id && key.startsWith(guestPrefix))) {
+                        localStorage.removeItem(key);
+                    }
+                }
             } catch (err) {
                 console.error('No se pudo limpiar el carrito guardado:', err);
             }
@@ -313,39 +393,63 @@
         }
 
         function loadCartFromStorage() {
-            if (!state.eventId) {
-                state.cart = [];
-                updateCartStorageStatus();
-                return;
-            }
+            const ownerId = state.user?.id || null;
+            const ownerPrefix = getCartPrefixByUserId(ownerId);
+            const guestPrefix = getCartPrefixByUserId(null);
+            let collected = [];
 
-            const userKey = getCartStorageKey();
-            const guestKey = getCartStorageKeyByUserId(null);
-            let parsed = [];
-
-            try {
-                const rawForUser = localStorage.getItem(userKey);
-                if (rawForUser) {
-                    parsed = normalizeCart(JSON.parse(rawForUser));
+            for (let index = 0; index < localStorage.length; index += 1) {
+                const key = localStorage.key(index);
+                if (!key) {
+                    continue;
                 }
-            } catch (err) {
-                parsed = [];
-            }
 
-            if (!parsed.length && state.user?.id) {
+                const isOwnerKey = key.startsWith(ownerPrefix);
+                const isGuestKey = Boolean(state.user?.id) && key.startsWith(guestPrefix);
+                if (!isOwnerKey && !isGuestKey) {
+                    continue;
+                }
+
+                const sourceUserId = isGuestKey ? null : ownerId;
+                const eventId = extractEventIdFromCartKey(key, sourceUserId);
+                if (!eventId) {
+                    continue;
+                }
+
                 try {
-                    const rawGuest = localStorage.getItem(guestKey);
-                    if (rawGuest) {
-                        parsed = normalizeCart(JSON.parse(rawGuest));
-                        localStorage.setItem(userKey, JSON.stringify(parsed));
-                        localStorage.removeItem(guestKey);
+                    const raw = localStorage.getItem(key);
+                    if (!raw) {
+                        continue;
                     }
+
+                    const normalized = normalizeCart(JSON.parse(raw), eventId);
+                    collected = collected.concat(normalized.map((item) => ({
+                        ...item,
+                        eventName: item.eventName || (String(eventId) === String(state.eventId || '') ? (state.event?.name || '') : ''),
+                    })));
                 } catch (err) {
-                    parsed = [];
+                    continue;
                 }
             }
 
-            state.cart = parsed;
+            const merged = new Map();
+            collected.forEach((item) => {
+                const key = `${item.eventId}::${item.ticketTypeId}`;
+                const prev = merged.get(key);
+                if (!prev) {
+                    merged.set(key, { ...item });
+                    return;
+                }
+
+                merged.set(key, {
+                    ...prev,
+                    quantity: Number(prev.quantity || 0) + Number(item.quantity || 0),
+                    maxAvailable: Math.max(Number(prev.maxAvailable || 1), Number(item.maxAvailable || 1)),
+                    eventName: prev.eventName || item.eventName,
+                });
+            });
+
+            state.cart = Array.from(merged.values());
             updateCartStorageStatus();
         }
 
@@ -355,7 +459,10 @@
             }
 
             const previous = JSON.stringify(state.cart);
-            state.cart = state.cart
+            const otherEventItems = state.cart.filter((item) => String(item.eventId) !== String(state.eventId));
+            const currentEventItems = state.cart.filter((item) => String(item.eventId) === String(state.eventId));
+
+            const reconciledCurrentEventItems = currentEventItems
                 .map((item) => {
                     const ticketType = getTicketTypeById(item.ticketTypeId);
                     if (!ticketType) {
@@ -368,6 +475,8 @@
                     }
 
                     return {
+                        eventId: String(state.eventId),
+                        eventName: item.eventName || state.event?.name || '',
                         ticketTypeId: ticketType.id,
                         typeName: ticketType.type_name,
                         unitPrice: Number(ticketType.price),
@@ -376,6 +485,8 @@
                     };
                 })
                 .filter(Boolean);
+
+            state.cart = [...otherEventItems, ...reconciledCurrentEventItems];
 
             if (JSON.stringify(state.cart) !== previous) {
                 saveCartToStorage();
@@ -723,7 +834,7 @@
 
         function getCartReservedQty(ticketTypeId) {
             return state.cart
-                .filter((item) => String(item.ticketTypeId) === String(ticketTypeId))
+                .filter((item) => String(item.ticketTypeId) === String(ticketTypeId) && String(item.eventId) === String(state.eventId))
                 .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
         }
 
@@ -804,24 +915,47 @@
             }
 
             let total = 0;
-            cartItems.innerHTML = state.cart.map((item) => {
-                const subtotal = Number(item.unitPrice) * Number(item.quantity);
-                total += subtotal;
+
+            const grouped = state.cart.reduce((acc, item) => {
+                const eventId = String(item.eventId || '');
+                if (!acc[eventId]) {
+                    acc[eventId] = [];
+                }
+                acc[eventId].push(item);
+                return acc;
+            }, {});
+
+            const blocks = Object.keys(grouped).map((eventId) => {
+                const items = grouped[eventId];
+                const eventName = items[0]?.eventName || `Evento ${eventId}`;
+                const rows = items.map((item) => {
+                    const subtotal = Number(item.unitPrice) * Number(item.quantity);
+                    total += subtotal;
+
+                    return `
+                        <article class="cart-item">
+                            <div>
+                                <h3>${item.typeName}</h3>
+                                <p class="event-meta">${Number(item.quantity)} x $${formatMoney(item.unitPrice)}</p>
+                            </div>
+                            <div class="cart-item-actions">
+                                <input class="cart-qty-input" data-cart-qty-id="${item.ticketTypeId}" data-cart-event-id="${item.eventId}" type="number" min="1" max="${item.maxAvailable}" value="${item.quantity}">
+                                <strong>$${formatMoney(subtotal)}</strong>
+                                <button class="image-btn" data-remove="${item.ticketTypeId}" data-remove-event-id="${item.eventId}" type="button">Quitar</button>
+                            </div>
+                        </article>
+                    `;
+                }).join('');
 
                 return `
-                    <article class="cart-item">
-                        <div>
-                            <h3>${item.typeName}</h3>
-                            <p class="event-meta">${Number(item.quantity)} x $${formatMoney(item.unitPrice)}</p>
-                        </div>
-                        <div class="cart-item-actions">
-                            <input class="cart-qty-input" data-cart-qty-id="${item.ticketTypeId}" type="number" min="1" max="${item.maxAvailable}" value="${item.quantity}">
-                            <strong>$${formatMoney(subtotal)}</strong>
-                            <button class="image-btn" data-remove="${item.ticketTypeId}" type="button">Quitar</button>
-                        </div>
-                    </article>
+                    <section class="panel" style="padding:10px; border-style:dashed;">
+                        <h3 style="margin:0 0 8px;">${eventName}</h3>
+                        <div class="cart-list">${rows}</div>
+                    </section>
                 `;
-            }).join('');
+            });
+
+            cartItems.innerHTML = blocks.join('');
 
             cartTotal.textContent = `Total: $${formatMoney(total)}`;
             updateCartStorageStatus();
@@ -859,12 +993,15 @@
                 return;
             }
 
-            const existing = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId));
+            const existing = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId) && String(item.eventId) === String(state.eventId));
             if (existing) {
                 existing.quantity += qty;
                 existing.maxAvailable = available;
+                existing.eventName = existing.eventName || state.event?.name || '';
             } else {
                 state.cart.push({
+                    eventId: String(state.eventId),
+                    eventName: state.event?.name || '',
                     ticketTypeId: ticketType.id,
                     typeName: ticketType.type_name,
                     unitPrice: Number(ticketType.price),
@@ -879,15 +1016,15 @@
             renderCart();
         }
 
-        function removeCartItem(ticketTypeId) {
-            state.cart = state.cart.filter((item) => String(item.ticketTypeId) !== String(ticketTypeId));
+        function removeCartItem(ticketTypeId, eventId) {
+            state.cart = state.cart.filter((item) => !(String(item.ticketTypeId) === String(ticketTypeId) && String(item.eventId) === String(eventId)));
             saveCartToStorage();
             renderCheckoutRows();
             renderCart();
         }
 
-        function updateCartItemQuantity(ticketTypeId, value) {
-            const item = state.cart.find((cartItem) => String(cartItem.ticketTypeId) === String(ticketTypeId));
+        function updateCartItemQuantity(ticketTypeId, eventId, value) {
+            const item = state.cart.find((cartItem) => String(cartItem.ticketTypeId) === String(ticketTypeId) && String(cartItem.eventId) === String(eventId));
             if (!item) {
                 return;
             }
@@ -911,6 +1048,8 @@
             }
 
             const purchaseSnapshot = state.cart.map((item) => ({
+                eventId: item.eventId,
+                eventName: item.eventName || '',
                 typeName: item.typeName,
                 quantity: Number(item.quantity),
                 unitPrice: Number(item.unitPrice)
@@ -947,7 +1086,7 @@
                 const summaryItems = purchaseSnapshot
                     .map((item) => {
                         const subtotal = item.quantity * item.unitPrice;
-                        return `<li><strong>${item.typeName}</strong> - ${item.quantity} x $${formatMoney(item.unitPrice)} = $${formatMoney(subtotal)}</li>`;
+                        return `<li><strong>${item.eventName || `Evento ${item.eventId}`}</strong> · ${item.typeName} - ${item.quantity} x $${formatMoney(item.unitPrice)} = $${formatMoney(subtotal)}</li>`;
                     })
                     .join('');
                 const summaryTotal = purchaseSnapshot
@@ -1095,6 +1234,9 @@
             }
             document.getElementById('doLogin').addEventListener('click', loginHandler);
             document.getElementById('doRegister').addEventListener('click', registerHandler);
+            purchaseCloseToHome.addEventListener('click', () => {
+                window.location.href = '/';
+            });
             clearCartButton.addEventListener('click', () => {
                 state.cart = [];
                 saveCartToStorage();
@@ -1147,7 +1289,10 @@
                     return;
                 }
 
-                removeCartItem(removeButton.getAttribute('data-remove'));
+                removeCartItem(
+                    removeButton.getAttribute('data-remove'),
+                    removeButton.getAttribute('data-remove-event-id')
+                );
             });
 
             cartItems.addEventListener('change', (event) => {
@@ -1156,7 +1301,11 @@
                     return;
                 }
 
-                updateCartItemQuantity(qtyInput.getAttribute('data-cart-qty-id'), qtyInput.value);
+                updateCartItemQuantity(
+                    qtyInput.getAttribute('data-cart-qty-id'),
+                    qtyInput.getAttribute('data-cart-event-id'),
+                    qtyInput.value
+                );
             });
 
             try {

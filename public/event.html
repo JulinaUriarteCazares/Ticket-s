@@ -342,6 +342,42 @@
             return { totalQty, eventIds };
         }
 
+        function getPreferredCartEventId() {
+            const owner = state.user?.id ? `user_${state.user.id}` : 'guest';
+            const prefix = `tm_cart_v1_${owner}_event_`;
+            let preferredEventId = null;
+            let preferredQty = 0;
+
+            for (let index = 0; index < localStorage.length; index += 1) {
+                const key = localStorage.key(index);
+                if (!key || !key.startsWith(prefix)) {
+                    continue;
+                }
+
+                const eventId = key.slice(prefix.length);
+                if (!eventId) {
+                    continue;
+                }
+
+                try {
+                    const cart = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (!Array.isArray(cart)) {
+                        continue;
+                    }
+
+                    const qty = cart.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+                    if (qty > preferredQty) {
+                        preferredQty = qty;
+                        preferredEventId = eventId;
+                    }
+                } catch (err) {
+                    continue;
+                }
+            }
+
+            return preferredEventId;
+        }
+
         function updateTopCartUi() {
             const summary = getCartSummary(true);
             cartTopButton.textContent = `Carrito (${summary.totalQty})`;
@@ -388,13 +424,13 @@
 
         function openTopCart() {
             const summary = getCartSummary();
+            const targetEventId = getPreferredCartEventId();
 
-            if (!summary.totalQty || !summary.eventIds.length) {
+            if (!summary.totalQty || !targetEventId) {
                 notify('Tu carrito esta en 0. Agrega boletos desde un evento.', 'info');
                 return;
             }
 
-            const targetEventId = summary.eventIds[0];
             window.location.href = `/purchase.html?id=${encodeURIComponent(targetEventId)}`;
         }
 
