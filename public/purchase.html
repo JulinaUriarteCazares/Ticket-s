@@ -25,25 +25,6 @@
             <p id="purchaseEventDescription" class="meta"></p>
         </section>
 
-        <section id="authPanel" class="panel purchase-auth hidden">
-            <div class="purchase-auth-grid">
-                <article class="purchase-auth-card">
-                    <h2>Iniciar sesion</h2>
-                    <input id="loginEmail" type="email" placeholder="Correo electronico">
-                    <input id="loginPassword" type="password" placeholder="Contrasena">
-                    <button id="doLogin" type="button">Entrar</button>
-                </article>
-
-                <article class="purchase-auth-card">
-                    <h2>Crear cuenta</h2>
-                    <input id="registerName" type="text" placeholder="Nombre de usuario">
-                    <input id="registerEmail" type="email" placeholder="Correo electronico">
-                    <input id="registerPassword" type="password" placeholder="Contrasena">
-                    <button id="doRegister" type="button">Registrarme</button>
-                </article>
-            </div>
-        </section>
-
         <section id="buyerOnlyMessage" class="panel hidden">
             <h2>Acceso restringido</h2>
             <p class="ticket-summary">Solo los usuarios con rol usuario pueden comprar boletos.</p>
@@ -104,6 +85,8 @@
 
     <div id="toastRoot" class="toasts"></div>
 
+    <script src="/auth-modal.js"></script>
+
     <script>
         const state = {
             token: localStorage.getItem('tm_token') || null,
@@ -113,7 +96,6 @@
             cart: [],
         };
 
-        const authPanel = document.getElementById('authPanel');
         const checkoutPanel = document.getElementById('checkoutPanel');
         const cartPanel = document.getElementById('cartPanel');
         const buyerOnlyMessage = document.getElementById('buyerOnlyMessage');
@@ -126,6 +108,21 @@
         const purchaseTicketsWrap = document.getElementById('purchaseTicketsWrap');
         const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
         let lastPurchasedTickets = [];
+
+        function openAuthModal() {
+            if (typeof window.openLoginModal === 'function') {
+                window.openLoginModal();
+            }
+        }
+
+        function closeAuthModal() {
+            if (typeof window.closeLoginModal === 'function') {
+                window.closeLoginModal();
+            }
+            if (typeof window.closeRegisterModal === 'function') {
+                window.closeRegisterModal();
+            }
+        }
 
         function showPurchaseSuccess(message, summaryHtml = '') {
             purchaseSuccessDetail.textContent = message || 'Gracias por tu compra.';
@@ -507,7 +504,11 @@
             const hasSession = Boolean(state.token && state.user);
             const buyer = isBuyer();
 
-            authPanel.classList.toggle('hidden', hasSession);
+            if (hasSession) {
+                closeAuthModal();
+            } else {
+                openAuthModal();
+            }
             buyerOnlyMessage.classList.toggle('hidden', !hasSession || buyer);
             checkoutPanel.classList.toggle('hidden', !buyer);
             cartPanel.classList.toggle('hidden', !buyer);
@@ -651,6 +652,7 @@
                 state.token = data.token;
                 state.user = parseUserFromToken(data.token);
                 notify('Sesion iniciada', 'ok');
+                closeAuthModal();
                 renderAccess();
             } catch (err) {
                 notify(err.message, 'err');
@@ -658,9 +660,9 @@
         }
 
         async function registerHandler() {
-            const name = document.getElementById('registerName').value.trim();
-            const email = document.getElementById('registerEmail').value.trim();
-            const password = document.getElementById('registerPassword').value;
+            const name = document.getElementById('regName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
 
             if (!name || !email || !password) {
                 notify('Completa nombre, correo y contrasena', 'err');
@@ -670,6 +672,10 @@
             try {
                 await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
                 notify('Cuenta creada. Inicia sesion para continuar', 'ok');
+                if (typeof window.closeRegisterModal === 'function' && typeof window.openLoginModal === 'function') {
+                    window.closeRegisterModal();
+                    window.openLoginModal();
+                }
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -693,6 +699,9 @@
 
             state.eventId = eventId;
             state.user = parseUserFromToken(state.token);
+            if (!state.token) {
+                openAuthModal();
+            }
             document.getElementById('backToEvent').addEventListener('click', () => {
                 window.location.href = `/event.html?id=${encodeURIComponent(state.eventId)}`;
             });
