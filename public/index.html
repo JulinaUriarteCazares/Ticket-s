@@ -13,11 +13,14 @@
             <span>Ticketmaster Clone</span>
         </a>
         <div class="topbar-right">
-            <div id="sessionLabel" class="session-pill hidden">Sin sesion activa</div>
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
+            </div>
             <div class="topbar-actions">
+                <button id="cartTopButton" class="auth-mini secondary" type="button">Carrito (0)</button>
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
                 <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
-                <button id="logoutTopButton" class="auth-mini secondary hidden" type="button">Cerrar sesion</button>
             </div>
         </div>
     </header>
@@ -122,8 +125,10 @@
         const registerModal = document.getElementById('registerModal');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
-        const logoutTopButton = document.getElementById('logoutTopButton');
-        const sessionLabel = document.getElementById('sessionLabel');
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
+        const logoutMenuButton = document.getElementById('logoutMenuButton');
+        const cartTopButton = document.getElementById('cartTopButton');
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
         const adminInsightsSection = document.getElementById('adminInsightsSection');
@@ -221,11 +226,11 @@
 
         function setAuthUi() {
             if (state.user) {
-                sessionLabel.textContent = `Sesion: ${state.user.name} (${state.user.role})`;
-                sessionLabel.classList.remove('hidden');
+                sessionMenuButton.textContent = state.user.name || 'Usuario';
+                sessionMenuButton.classList.remove('hidden');
+                cartTopButton.classList.remove('hidden');
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
-                logoutTopButton.classList.remove('hidden');
                 if (state.user.role === 'organizer' || state.user.role === 'admin') {
                     document.getElementById('heroBanner').classList.add('hero-organizer');
                     document.getElementById('heroTitle').textContent = `Bienvenido, ${state.user.name}`;
@@ -237,17 +242,90 @@
                 }
             } else {
                 const defaultHero = getDefaultHeroContent();
-                sessionLabel.textContent = 'Sin sesion activa';
-                sessionLabel.classList.add('hidden');
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
+                cartTopButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
-                logoutTopButton.classList.add('hidden');
+                closeSessionMenu();
                 document.getElementById('heroBanner').classList.toggle('hero-organizer', defaultHero.organizer);
                 document.getElementById('heroTitle').textContent = defaultHero.title;
                 document.getElementById('heroCopy').textContent = defaultHero.copy;
             }
 
             adminInsightsSection.classList.toggle('hidden', !isAdmin());
+            updateTopCartUi();
+        }
+
+        function getCartSummary() {
+            const owner = state.user?.id ? `user_${state.user.id}` : 'guest';
+            const prefix = `tm_cart_v1_${owner}_event_`;
+            let totalQty = 0;
+            const eventIds = [];
+
+            for (let index = 0; index < localStorage.length; index += 1) {
+                const key = localStorage.key(index);
+                if (!key || !key.startsWith(prefix)) {
+                    continue;
+                }
+
+                const eventId = key.slice(prefix.length);
+                if (eventId) {
+                    eventIds.push(eventId);
+                }
+
+                try {
+                    const cart = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (!Array.isArray(cart)) {
+                        continue;
+                    }
+                    totalQty += cart.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+                } catch (err) {
+                    continue;
+                }
+            }
+
+            return {
+                totalQty,
+                eventIds,
+            };
+        }
+
+        function updateTopCartUi() {
+            const summary = getCartSummary();
+            cartTopButton.textContent = `Carrito (${summary.totalQty})`;
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
+        function openTopCart() {
+            const summary = getCartSummary();
+
+            if (!summary.totalQty || !summary.eventIds.length) {
+                notify('Tu carrito esta en 0. Agrega boletos desde un evento.', 'info');
+                return;
+            }
+
+            const targetEventId = summary.eventIds[0];
+            window.location.href = `/purchase.html?id=${encodeURIComponent(targetEventId)}`;
         }
 
         async function apiCall(method, url, body = null) {
@@ -545,6 +623,7 @@
                 setAuthUi();
                 closeLoginModal();
                 notify(`Bienvenido ${result.user.name}`, 'ok');
+                updateTopCartUi();
                 await loadEvents();
                 await loadAdminInsights();
             } catch (err) {
@@ -615,14 +694,23 @@
             state.token = null;
             state.user = null;
             state.adminInsights = [];
+            closeSessionMenu();
             setAuthUi();
+            updateTopCartUi();
             await loadEvents();
             notify('Sesion cerrada', 'info');
         }
 
+        cartTopButton.addEventListener('click', openTopCart);
+        sessionMenuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSessionMenu();
+        });
+        logoutMenuButton.addEventListener('click', async () => {
+            await logoutHandler();
+        });
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);
-        logoutTopButton.addEventListener('click', logoutHandler);
         document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
         document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
         document.getElementById('openRegisterFromLogin').addEventListener('click', () => {
@@ -656,6 +744,12 @@
             }
         });
 
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.topbar-right')) {
+                closeSessionMenu();
+            }
+        });
+
         eventsRoot.addEventListener('click', (event) => {
             const card = event.target.closest('[data-event-open]');
             if (!card) {
@@ -669,8 +763,11 @@
             await restoreSession();
             await loadEvents();
             await loadAdminInsights();
+            updateTopCartUi();
             notify('Inicio listo para comprar boletos', 'info');
         })();
+
+        window.addEventListener('storage', updateTopCartUi);
     </script>
 </body>
 </html>

@@ -40,10 +40,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 24px;
+    height: 76px;
+    padding: 0 24px;
     border-bottom: 1px solid var(--line);
     backdrop-filter: blur(6px);
     background: rgba(255, 252, 244, 0.9);
+    overflow: visible;
 }
 
 .brand {
@@ -76,12 +78,18 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+    position: relative;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 .topbar-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    min-width: 0;
 }
 
 .auth-mini {
@@ -90,6 +98,9 @@ body {
     padding: 8px 12px;
     font-weight: 700;
     font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    flex-shrink: 0;
     cursor: pointer;
     background: var(--ink);
     color: #fff;
@@ -114,6 +125,40 @@ body {
     font-size: 12px;
     color: var(--muted);
     background: var(--surface);
+}
+
+.session-menu-trigger {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.session-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 190px;
+    border: 1px solid #d8cfbe;
+    border-radius: 10px;
+    background: #fffdf8;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    z-index: 30;
+}
+
+.session-menu-item {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #1d2027;
+    text-align: left;
+    padding: 9px 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.session-menu-item:hover {
+    background: #f3eee3;
 }
 
 main {
@@ -1355,11 +1400,25 @@ select {
 
 @media (max-width: 650px) {
     .topbar {
-        padding: 12px 14px;
+        height: 66px;
+        padding: 0 12px;
+    }
+
+    .brand-link span {
+        display: none;
     }
 
     .session-pill {
         display: none;
+    }
+
+    .topbar-right {
+        gap: 6px;
+    }
+
+    .auth-mini {
+        padding: 7px 10px;
+        font-size: 11px;
     }
 
     .auth-actions,

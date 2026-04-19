@@ -15,10 +15,18 @@
     <header class="topbar">
         <a class="brand brand-link" href="/" aria-label="Ir al inicio">
             <div class="brand-mark">TM</div>
-            <span id="topTitle">Detalle del evento</span>
+            <span>Ticketmaster Clone</span>
         </a>
-        <div class="actions">
-            <button id="backHome" type="button">Volver</button>
+        <div class="topbar-right">
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
+            </div>
+            <div class="topbar-actions">
+                <button id="cartTopButton" class="auth-mini secondary hidden" type="button">Carrito (0)</button>
+                <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
+                <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
+            </div>
         </div>
     </header>
 
@@ -255,6 +263,12 @@
         const organizerEventStatus = document.getElementById('organizerEventStatus');
         const adminEventReportSection = document.getElementById('adminEventReportSection');
         const adminEventReportRoot = document.getElementById('adminEventReportRoot');
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
+        const logoutMenuButton = document.getElementById('logoutMenuButton');
+        const cartTopButton = document.getElementById('cartTopButton');
+        const loginButton = document.getElementById('loginButton');
+        const registerButton = document.getElementById('registerButton');
         const eventFieldIds = [
             'editName',
             'editLocation',
@@ -287,6 +301,115 @@
             if (typeof window.closeRegisterModal === 'function') {
                 window.closeRegisterModal();
             }
+        }
+
+        function getCartStorageKeyByUserId(userId) {
+            const owner = userId ? `user_${userId}` : 'guest';
+            return `tm_cart_v1_${owner}_event_${state.eventId || 'unknown'}`;
+        }
+
+        function getCartSummary(onlyCurrentEvent = false) {
+            const owner = state.user?.id ? `user_${state.user.id}` : 'guest';
+            const prefix = `tm_cart_v1_${owner}_event_`;
+            let totalQty = 0;
+            const eventIds = [];
+
+            for (let index = 0; index < localStorage.length; index += 1) {
+                const key = localStorage.key(index);
+                if (!key || !key.startsWith(prefix)) {
+                    continue;
+                }
+
+                const eventId = key.slice(prefix.length);
+                if (onlyCurrentEvent && String(eventId) !== String(state.eventId || '')) {
+                    continue;
+                }
+                if (eventId) {
+                    eventIds.push(eventId);
+                }
+
+                try {
+                    const cart = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (!Array.isArray(cart)) {
+                        continue;
+                    }
+                    totalQty += cart.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+                } catch (err) {
+                    continue;
+                }
+            }
+
+            return { totalQty, eventIds };
+        }
+
+        function updateTopCartUi() {
+            const summary = getCartSummary(true);
+            cartTopButton.textContent = `Carrito (${summary.totalQty})`;
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
+        function setTopbarUi() {
+            if (state.user) {
+                sessionMenuButton.textContent = state.user.name || 'Usuario';
+                sessionMenuButton.classList.remove('hidden');
+                cartTopButton.classList.remove('hidden');
+                loginButton.classList.add('hidden');
+                registerButton.classList.add('hidden');
+            } else {
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
+                cartTopButton.classList.add('hidden');
+                loginButton.classList.remove('hidden');
+                registerButton.classList.remove('hidden');
+                closeSessionMenu();
+            }
+
+            updateTopCartUi();
+        }
+
+        function openTopCart() {
+            const summary = getCartSummary();
+
+            if (!summary.totalQty || !summary.eventIds.length) {
+                notify('Tu carrito esta en 0. Agrega boletos desde un evento.', 'info');
+                return;
+            }
+
+            const targetEventId = summary.eventIds[0];
+            window.location.href = `/purchase.html?id=${encodeURIComponent(targetEventId)}`;
+        }
+
+        async function logoutHandler() {
+            localStorage.removeItem('tm_token');
+            localStorage.removeItem('tm_user');
+            state.token = null;
+            state.user = null;
+            state.cart = [];
+            closeSessionMenu();
+            setTopbarUi();
+            if (state.event) {
+                renderEvent();
+            }
+            notify('Sesion cerrada', 'info');
         }
 
         function parseUserFromToken(token) {
@@ -421,7 +544,6 @@
             document.getElementById('eventMeta').textContent = `${formatDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
             document.getElementById('eventArtist').textContent = `Artista: ${event.artist_name || 'Por confirmar'}`;
             document.getElementById('eventDescription').textContent = event.description || 'Sin descripcion';
-            document.getElementById('topTitle').textContent = event.name || 'Detalle del evento';
 
             const body = document.getElementById('ticketTypesBody');
             const editable = canEditEvent(event);
@@ -974,6 +1096,7 @@
                     localStorage.setItem('tm_user', JSON.stringify(state.user));
                 }
                 closeAuthModal();
+                setTopbarUi();
                 notify('Sesion iniciada', 'ok');
                 await loadEvent();
             } catch (err) {
@@ -1022,6 +1145,7 @@
             }
 
             state.checkoutOpen = false;
+            setTopbarUi();
         }
 
         async function init() {
@@ -1041,8 +1165,19 @@
             }
         }
 
-        document.getElementById('backHome').addEventListener('click', () => {
-            window.location.href = '/';
+        cartTopButton.addEventListener('click', openTopCart);
+        loginButton.addEventListener('click', openAuthModal);
+        registerButton.addEventListener('click', () => {
+            if (typeof window.openRegisterModal === 'function') {
+                window.openRegisterModal();
+            }
+        });
+        sessionMenuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSessionMenu();
+        });
+        logoutMenuButton.addEventListener('click', async () => {
+            await logoutHandler();
         });
 
         quickEditEvent.addEventListener('click', openEventEditorModal);
@@ -1162,6 +1297,14 @@
 
             updateEventCartItemQuantity(qtyInput.dataset.cartQtyId, qtyInput.value);
         });
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.topbar-right')) {
+                closeSessionMenu();
+            }
+        });
+
+        window.addEventListener('storage', updateTopCartUi);
 
         init();
     </script>
