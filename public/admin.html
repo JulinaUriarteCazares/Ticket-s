@@ -13,11 +13,11 @@
             <span>Ticketmaster Clone</span>
         </a>
         <div class="topbar-right">
-            <div id="sessionLabel" class="session-pill hidden">Sin sesion activa</div>
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
                 <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
-                <button id="logoutTopButton" class="auth-mini secondary hidden" type="button">Cerrar sesion</button>
             </div>
         </div>
     </header>
@@ -37,6 +37,48 @@
             </div>
             <div id="adminStatementRoot" class="admin-statement"></div>
             <div id="adminInsightsRoot" class="admin-insights-grid"></div>
+        </section>
+
+        <section id="adminUsersSection" class="hidden">
+            <div class="section-head">
+                <h2>Usuarios</h2>
+                <button id="refreshUsersButton" class="refresh-btn" type="button">Actualizar usuarios</button>
+            </div>
+            <div class="admin-users-grid">
+                <article class="admin-user-card">
+                    <h3>Crear usuario</h3>
+                    <p class="admin-user-note">Crea usuarios normales, organizadores o administradores desde este panel.</p>
+                    <div class="admin-user-form">
+                        <label class="field-label" for="adminUserName">Nombre</label>
+                        <input id="adminUserName" type="text" placeholder="Nombre del usuario" autocomplete="off" spellcheck="false">
+                        <label class="field-label" for="adminUserEmail">Correo electronico</label>
+                        <input id="adminUserEmail" type="email" placeholder="correo@ejemplo.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+                        <label class="field-label" for="adminUserPassword">Contrasena</label>
+                        <input id="adminUserPassword" type="password" placeholder="******" autocomplete="new-password">
+                        <label class="field-label" for="adminUserPasswordConfirm">Confirmar contrasena</label>
+                        <input id="adminUserPasswordConfirm" type="password" placeholder="******" autocomplete="new-password">
+                        <label class="field-label" for="adminUserRole">Rol</label>
+                        <select id="adminUserRole">
+                            <option value="user">Usuario</option>
+                            <option value="organizer">Organizador</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="auth-actions">
+                        <button id="createUserButton" class="action-primary login-submit" type="button">Crear usuario</button>
+                    </div>
+                </article>
+
+                <article class="admin-user-card">
+                    <div class="section-title-row admin-user-card-head">
+                        <div>
+                            <h3>Usuarios registrados</h3>
+                            <p class="admin-user-note">Elimina cuentas desde aqui; tu propia cuenta se mantiene en configuraciones.</p>
+                        </div>
+                    </div>
+                    <div id="usersRoot" class="admin-user-list"></div>
+                </article>
+            </div>
         </section>
     </main>
 
@@ -103,7 +145,8 @@
             user: null,
             events: [],
             adminSummary: { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 },
-            adminInsights: []
+            adminInsights: [],
+            users: []
         };
         const pageMode = 'admin';
         document.body.classList.add(`${pageMode}-page`);
@@ -112,12 +155,16 @@
         const registerModal = document.getElementById('registerModal');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
-        const logoutTopButton = document.getElementById('logoutTopButton');
-        const sessionLabel = document.getElementById('sessionLabel');
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
         const toastRoot = document.getElementById('toastRoot');
         const adminInsightsSection = document.getElementById('adminInsightsSection');
         const adminStatementRoot = document.getElementById('adminStatementRoot');
         const adminInsightsRoot = document.getElementById('adminInsightsRoot');
+        const adminUsersSection = document.getElementById('adminUsersSection');
+        const refreshUsersButton = document.getElementById('refreshUsersButton');
+        const createUserButton = document.getElementById('createUserButton');
+        const usersRoot = document.getElementById('usersRoot');
         const regRoleWrap = document.getElementById('regRoleWrap');
         const regRoleHint = document.getElementById('regRoleHint');
 
@@ -131,6 +178,14 @@
 
         function isAdmin() {
             return state.user && state.user.role === 'admin';
+        }
+
+        function getMinPasswordLength(role) {
+            const normalizedRole = String(role || '').trim().toLowerCase();
+            if (normalizedRole === 'organizer' || normalizedRole === 'admin') {
+                return 4;
+            }
+            return 6;
         }
 
         function getRoleRoute(role) {
@@ -206,13 +261,45 @@
             }, 3500);
         }
 
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            sessionMenu.innerHTML = [
+                '<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>',
+                '<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>',
+            ].join('');
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
         function setAuthUi() {
             if (state.user) {
-                sessionLabel.textContent = `Sesion: ${state.user.name} (${state.user.role})`;
-                sessionLabel.classList.remove('hidden');
+                sessionMenuButton.textContent = `${state.user.name}`;
+                sessionMenuButton.classList.remove('hidden');
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
-                logoutTopButton.classList.remove('hidden');
+                renderSessionMenu();
                 if (state.user.role === 'organizer' || state.user.role === 'admin') {
                     document.getElementById('heroBanner').classList.add('hero-organizer');
                     document.getElementById('heroTitle').textContent = `Bienvenido, ${state.user.name}`;
@@ -224,17 +311,19 @@
                 }
             } else {
                 const defaultHero = getDefaultHeroContent();
-                sessionLabel.textContent = 'Sin sesion activa';
-                sessionLabel.classList.add('hidden');
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
-                logoutTopButton.classList.add('hidden');
+                sessionMenu.innerHTML = '';
+                closeSessionMenu();
                 document.getElementById('heroBanner').classList.toggle('hero-organizer', defaultHero.organizer);
                 document.getElementById('heroTitle').textContent = defaultHero.title;
                 document.getElementById('heroCopy').textContent = defaultHero.copy;
             }
 
             adminInsightsSection.classList.toggle('hidden', !isAdmin());
+            adminUsersSection.classList.toggle('hidden', !isAdmin());
         }
 
         async function apiCall(method, url, body = null) {
@@ -405,6 +494,33 @@
             }).join('');
         }
 
+        function renderUsers() {
+            if (!isAdmin()) {
+                usersRoot.innerHTML = '';
+                return;
+            }
+
+            if (!state.users.length) {
+                usersRoot.innerHTML = '<div class="empty">No hay usuarios registrados.</div>';
+                return;
+            }
+
+            usersRoot.innerHTML = state.users.map((user) => {
+                const isCurrentUser = state.user && String(state.user.id) === String(user.id);
+                return `
+                    <article class="admin-user-row">
+                        <div>
+                            <h4>${user.name || 'Usuario'}</h4>
+                            <p>${user.email || 'Sin correo'}<br>Rol: ${user.role || 'user'}</p>
+                        </div>
+                        <div class="admin-user-row-actions">
+                            ${isCurrentUser ? '<span class="admin-user-self">Tu cuenta</span>' : `<button class="danger-btn" type="button" data-user-delete="${user.id}">Borrar</button>`}
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
         async function loadAdminInsights() {
             if (!isAdmin()) {
                 state.adminInsights = [];
@@ -437,6 +553,90 @@
                 renderAdminInsights();
             } catch (err) {
                 adminInsightsRoot.innerHTML = '<div class="empty">No se pudo cargar el panel admin.</div>';
+                notify(err.message, 'err');
+            }
+        }
+
+        async function loadUsers() {
+            if (!isAdmin()) {
+                state.users = [];
+                renderUsers();
+                return;
+            }
+
+            usersRoot.innerHTML = '<div class="loader">Cargando usuarios...</div>';
+            try {
+                const payload = await apiCall('GET', '/auth/users');
+                state.users = Array.isArray(payload.users) ? payload.users : [];
+                renderUsers();
+            } catch (err) {
+                usersRoot.innerHTML = '<div class="empty">No se pudo cargar la lista de usuarios.</div>';
+                notify(err.message, 'err');
+            }
+        }
+
+        async function createUserHandler() {
+            if (!isAdmin()) {
+                return;
+            }
+
+            const name = document.getElementById('adminUserName').value.trim();
+            const email = document.getElementById('adminUserEmail').value.trim();
+            const password = document.getElementById('adminUserPassword').value;
+            const confirmPassword = document.getElementById('adminUserPasswordConfirm').value;
+            const role = document.getElementById('adminUserRole').value;
+            const minLength = getMinPasswordLength(role);
+
+            if (!name || !email || !password || !confirmPassword) {
+                notify('Completa todos los campos para crear el usuario', 'err');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                notify('Las contrasenas no coinciden', 'err');
+                return;
+            }
+
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
+            if (password.length < minLength) {
+                notify(`La contrasena para ${role} debe tener al menos ${minLength} caracteres`, 'err');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/auth/register', { name, email, password, role });
+                notify('Usuario creado correctamente', 'ok');
+                document.getElementById('adminUserName').value = '';
+                document.getElementById('adminUserEmail').value = '';
+                document.getElementById('adminUserPassword').value = '';
+                document.getElementById('adminUserPasswordConfirm').value = '';
+                document.getElementById('adminUserRole').value = 'user';
+                await loadUsers();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function deleteUserHandler(userId) {
+            if (!isAdmin() || !userId) {
+                return;
+            }
+
+            const user = state.users.find((item) => String(item.id) === String(userId));
+            const approved = window.confirm(`Se eliminara a ${user?.name || 'este usuario'}. Deseas continuar?`);
+            if (!approved) {
+                return;
+            }
+
+            try {
+                await apiCall('DELETE', `/auth/users/${encodeURIComponent(userId)}`);
+                notify('Usuario eliminado correctamente', 'ok');
+                await loadUsers();
+            } catch (err) {
                 notify(err.message, 'err');
             }
         }
@@ -565,12 +765,34 @@
             state.token = null;
             state.user = null;
             state.adminInsights = [];
+            state.users = [];
+            closeSessionMenu();
             window.location.replace('/');
         }
 
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);
-        logoutTopButton.addEventListener('click', logoutHandler);
+        sessionMenuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSessionMenu();
+        });
+        sessionMenu.addEventListener('click', async (event) => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+
+            if (button.id === 'settingsMenuButton') {
+                closeSessionMenu();
+                window.location.href = '/settings.html';
+                return;
+            }
+
+            if (button.id === 'logoutMenuButton') {
+                closeSessionMenu();
+                await logoutHandler();
+            }
+        });
         document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
         document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
         document.getElementById('openRegisterFromLogin').addEventListener('click', () => {
@@ -583,6 +805,8 @@
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
+        refreshUsersButton.addEventListener('click', loadUsers);
+        createUserButton.addEventListener('click', createUserHandler);
 
         loginModal.addEventListener('click', (event) => {
             if (event.target === loginModal) {
@@ -605,9 +829,25 @@
             window.location.href = `/event.html?id=${encodeURIComponent(card.dataset.eventOpen)}`;
         });
 
+        document.addEventListener('click', (event) => {
+            if (!sessionMenu.contains(event.target) && event.target !== sessionMenuButton) {
+                closeSessionMenu();
+            }
+        });
+
+        usersRoot.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-user-delete]');
+            if (!button) {
+                return;
+            }
+
+            deleteUserHandler(button.dataset.userDelete);
+        });
+
         (async function init() {
             await restoreSession();
             await loadAdminInsights();
+            await loadUsers();
             notify('Panel admin listo', 'info');
         })();
     </script>

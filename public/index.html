@@ -14,11 +14,7 @@
         </a>
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
-            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
-                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
-                <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
-                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
-            </div>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
                 <button id="cartTopButton" class="auth-mini secondary" type="button">Carrito (0)</button>
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
@@ -148,9 +144,6 @@
         const registerButton = document.getElementById('registerButton');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
-        const boletosMenuButton = document.getElementById('boletosMenuButton');
-        const settingsMenuButton = document.getElementById('settingsMenuButton');
-        const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
@@ -247,13 +240,29 @@
             }, 3500);
         }
 
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            const menuItems = [];
+            if (isRegularUser()) {
+                menuItems.push('<button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>');
+            }
+            menuItems.push('<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>');
+            menuItems.push('<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>');
+            sessionMenu.innerHTML = menuItems.join('');
+        }
+
         function setAuthUi() {
             if (state.user) {
                 sessionMenuButton.textContent = state.user.name || 'Usuario';
                 sessionMenuButton.classList.remove('hidden');
-                cartTopButton.classList.remove('hidden');
+                cartTopButton.classList.toggle('hidden', !isRegularUser());
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
+                renderSessionMenu();
                 if (state.user.role === 'organizer' || state.user.role === 'admin') {
                     document.getElementById('heroBanner').classList.add('hero-organizer');
                     document.getElementById('heroTitle').textContent = `Bienvenido, ${state.user.name}`;
@@ -270,6 +279,7 @@
                 cartTopButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
+                sessionMenu.innerHTML = '';
                 closeSessionMenu();
                 document.getElementById('heroBanner').classList.toggle('hero-organizer', defaultHero.organizer);
                 document.getElementById('heroTitle').textContent = defaultHero.title;
@@ -1072,16 +1082,27 @@
             event.stopPropagation();
             toggleSessionMenu();
         });
-        boletosMenuButton.addEventListener('click', async () => {
-            closeSessionMenu();
-            openBoletosModal();
-        });
-        settingsMenuButton.addEventListener('click', () => {
-            closeSessionMenu();
-            window.location.href = '/settings.html';
-        });
-        logoutMenuButton.addEventListener('click', async () => {
-            await logoutHandler();
+        sessionMenu.addEventListener('click', async (event) => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+
+            if (button.id === 'boletosMenuButton') {
+                closeSessionMenu();
+                openBoletosModal();
+                return;
+            }
+
+            if (button.id === 'settingsMenuButton') {
+                closeSessionMenu();
+                window.location.href = '/settings.html';
+                return;
+            }
+
+            if (button.id === 'logoutMenuButton') {
+                await logoutHandler();
+            }
         });
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);

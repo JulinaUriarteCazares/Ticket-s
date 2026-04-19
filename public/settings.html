@@ -14,11 +14,7 @@
         </a>
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
-            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
-                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
-                <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
-                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
-            </div>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
                 <button id="cartTopButton" class="auth-mini secondary hidden" type="button">Carrito (0)</button>
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
@@ -105,12 +101,13 @@
 
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
-        const boletosMenuButton = document.getElementById('boletosMenuButton');
-        const settingsMenuButton = document.getElementById('settingsMenuButton');
-        const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
+
+        function isRegularUser() {
+            return state.user && state.user.role === 'user';
+        }
 
         function notify(message, kind = 'info') {
             const toast = document.createElement('div');
@@ -155,6 +152,21 @@
             sessionMenuButton.setAttribute('aria-expanded', 'true');
         }
 
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            const menuItems = [];
+            if (isRegularUser()) {
+                menuItems.push('<button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>');
+            }
+            menuItems.push('<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>');
+            menuItems.push('<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>');
+            sessionMenu.innerHTML = menuItems.join('');
+        }
+
         async function apiCall(method, url, body = null) {
             const headers = { 'Content-Type': 'application/json' };
             if (state.token) {
@@ -193,15 +205,17 @@
             if (state.user) {
                 sessionMenuButton.textContent = state.user.name || 'Usuario';
                 sessionMenuButton.classList.remove('hidden');
-                cartTopButton.classList.remove('hidden');
+                cartTopButton.classList.toggle('hidden', !isRegularUser());
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
+                renderSessionMenu();
             } else {
                 sessionMenuButton.textContent = 'Sin sesion activa';
                 sessionMenuButton.classList.add('hidden');
                 cartTopButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
+                sessionMenu.innerHTML = '';
                 closeSessionMenu();
             }
         }
@@ -234,14 +248,15 @@
             const currentPassword = document.getElementById('currentPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+            const minLength = (state.user?.role === 'organizer' || state.user?.role === 'admin') ? 4 : 6;
 
             if (!currentPassword || !newPassword || !confirmNewPassword) {
                 notify('Completa todos los campos de contrasena', 'err');
                 return;
             }
 
-            if (newPassword.length < 6) {
-                notify('La nueva contrasena debe tener al menos 6 caracteres', 'err');
+            if (newPassword.length < minLength) {
+                notify(`La nueva contrasena debe tener al menos ${minLength} caracteres`, 'err');
                 return;
             }
 
@@ -325,17 +340,26 @@
                 toggleSessionMenu();
             });
 
-            boletosMenuButton.addEventListener('click', () => {
-                closeSessionMenu();
-                window.location.href = '/';
-            });
+            sessionMenu.addEventListener('click', async (event) => {
+                const button = event.target.closest('button');
+                if (!button) {
+                    return;
+                }
 
-            settingsMenuButton.addEventListener('click', () => {
-                closeSessionMenu();
-            });
+                if (button.id === 'boletosMenuButton') {
+                    closeSessionMenu();
+                    window.location.href = '/';
+                    return;
+                }
 
-            logoutMenuButton.addEventListener('click', async () => {
-                await logoutHandler();
+                if (button.id === 'settingsMenuButton') {
+                    closeSessionMenu();
+                    return;
+                }
+
+                if (button.id === 'logoutMenuButton') {
+                    await logoutHandler();
+                }
             });
 
             document.getElementById('saveProfileButton').addEventListener('click', updateProfileName);

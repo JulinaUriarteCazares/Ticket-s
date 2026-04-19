@@ -32,12 +32,13 @@
 .seat-picker-card {
 	width: min(1120px, 100%);
 	max-height: calc(100vh - 32px);
-	overflow: auto;
+	overflow: hidden;
 	border: 1px solid #d7cfbe;
 	border-radius: 14px;
 	background: #f6f7fb;
 	padding: 16px;
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: 12px;
 }
 
@@ -84,8 +85,8 @@
 }
 
 .seat-dot-selected {
-	background: #4c7cf0;
-	border-color: #4c7cf0;
+	background: #0aa84f;
+	border-color: #0aa84f;
 }
 
 .seat-dot-available {
@@ -163,6 +164,10 @@
 	grid-template-columns: minmax(0, 1fr) 260px;
 	gap: 12px;
 	align-items: start;
+	min-height: 0;
+	max-height: calc(100vh - 290px);
+	overflow: hidden;
+	padding-right: 4px;
 }
 
 .seat-mini-map {
@@ -255,8 +260,36 @@
 	border-radius: 12px;
 	background: #fff;
 	padding: 12px;
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: 10px;
+	min-height: 0;
+	max-height: 100%;
+}
+
+.seat-zone-rows {
+	display: grid;
+	gap: 6px;
+	min-height: 0;
+	max-height: calc(100vh - 430px);
+	overflow-y: auto;
+	padding-right: 6px;
+	scrollbar-gutter: stable;
+}
+
+.seat-zone-rows::-webkit-scrollbar {
+	width: 10px;
+}
+
+.seat-zone-rows::-webkit-scrollbar-track {
+	background: #eef1f7;
+	border-radius: 999px;
+}
+
+.seat-zone-rows::-webkit-scrollbar-thumb {
+	background: #b7c1d8;
+	border-radius: 999px;
+	border: 2px solid #eef1f7;
 }
 
 .seat-zone-card.zone-platino {
@@ -337,16 +370,25 @@
 }
 
 .seat-btn.is-selected {
-	background: #4c7cf0;
-	border-color: #4c7cf0;
+	background: #0aa84f;
+	border-color: #067d3d;
 	color: #fff;
+	box-shadow: 0 0 0 3px rgba(10, 168, 79, 0.26), 0 8px 18px rgba(10, 168, 79, 0.18);
+	font-weight: 900;
 }
 
 .seat-btn.is-occupied {
-	background: #e5e8ef;
-	border-color: #e5e8ef;
-	color: #6e7990;
+	background: #d64545;
+	border-color: #d64545;
+	color: #fff;
 	cursor: not-allowed;
+	opacity: 0.92;
+}
+
+.seat-btn.is-available {
+	background: #fff;
+	border-color: #7d8daa;
+	color: #12316a;
 }
 
 .seat-picker-footer {
@@ -419,6 +461,11 @@
 
 	.seat-layout-wrap {
 		grid-template-columns: 1fr;
+		max-height: calc(100vh - 260px);
+	}
+
+	.seat-zone-rows {
+		max-height: calc(100vh - 360px);
 	}
 
 	.seat-mini-map {

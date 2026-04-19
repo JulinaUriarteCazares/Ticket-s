@@ -68,6 +68,23 @@ async function ensureSeatsSupport() {
   return seatsSupported;
 }
 
+async function cleanupExpiredSeatReservations(client) {
+  const supportsSeats = await ensureSeatsSupport();
+  if (!supportsSeats) {
+    return;
+  }
+
+  await client.query(
+    `UPDATE seats
+     SET status = 'available',
+         reserved_by = NULL,
+         reserved_until = NULL
+     WHERE status = 'reserved'
+       AND reserved_until IS NOT NULL
+       AND reserved_until < NOW()`
+  );
+}
+
 function rowLabelFromIndex(index) {
   let n = Number(index) + 1;
   let label = '';
@@ -741,6 +758,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
     let seats = [];
 
     if (supportsSeats) {
+      await cleanupExpiredSeatReservations(client);
       await ensureDefaultSeatsForTicketType(client, ticketTypeId, ticketType.capacity, ticketType.type_name);
 
       const seatsResult = await client.query(
@@ -819,6 +837,7 @@ router.post('/purchase-with-seats', auth, async (req, res) => {
     const supportsSeats = await ensureSeatsSupport();
 
     await client.query('BEGIN');
+    await cleanupExpiredSeatReservations(client);
 
     const typeResult = await client.query(
       'SELECT * FROM ticket_types WHERE id = $1 FOR UPDATE',

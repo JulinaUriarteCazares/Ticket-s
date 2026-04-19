@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const eventRoutes = require('./routes/events');
 const ticketRoutes = require('./routes/tickets');
 const reportRoutes = require('./routes/reports');
+const paymentRoutes = require('./routes/payments');
 
 const app = express();
 app.disable('x-powered-by');
@@ -19,6 +20,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paymentRoutes.webhook);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public', { dotfiles: 'deny' }));  // Sirve archivos estáticos desde la carpeta "public"
@@ -27,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/payments', paymentRoutes.router);
 
 const PORT = process.env.PORT || 3000;
 

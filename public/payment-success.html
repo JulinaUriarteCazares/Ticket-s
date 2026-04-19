@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago confirmado</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body {
+      background: linear-gradient(180deg, #f5efe3 0%, #efe6d7 100%);
+    }
+    .payment-success-shell {
+      width: min(920px, calc(100% - 24px));
+      margin: 28px auto 72px;
+    }
+    .payment-success-card {
+      background: #fffdf8;
+      border: 1px solid #ddd4c2;
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 16px 34px rgba(13, 16, 32, 0.08);
+      display: grid;
+      gap: 18px;
+    }
+    .payment-success-head {
+      display: grid;
+      gap: 6px;
+    }
+    .payment-success-head h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 40px);
+    }
+    .payment-success-head p {
+      margin: 0;
+      color: #6a6258;
+    }
+    .payment-status {
+      display: inline-flex;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 800;
+      background: #ece5d8;
+      color: #1a1c25;
+    }
+    .payment-status.is-paid {
+      background: #dff5e3;
+      color: #0f5f31;
+    }
+    .payment-status.is-pending {
+      background: #fff1c9;
+      color: #8b5c00;
+    }
+    .payment-summary-list {
+      display: grid;
+      gap: 10px;
+    }
+    .payment-item {
+      border: 1px solid #e3dac8;
+      border-radius: 14px;
+      padding: 14px;
+      background: #fff;
+      display: grid;
+      gap: 4px;
+    }
+    .payment-item strong {
+      font-size: 18px;
+      color: #151822;
+    }
+    .payment-item span,
+    .payment-item small {
+      color: #5f6574;
+    }
+    .payment-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .payment-meta div {
+      border: 1px solid #e5ddcd;
+      border-radius: 12px;
+      padding: 12px;
+      background: #faf7ef;
+    }
+    .payment-meta span {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7a7366;
+      margin-bottom: 4px;
+    }
+    .payment-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .payment-actions button,
+    .payment-actions a {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 16px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .payment-actions .primary {
+      background: #111827;
+      color: #fff;
+    }
+    .payment-actions .secondary {
+      background: #ece5d8;
+      color: #111827;
+    }
+    @media (max-width: 760px) {
+      .payment-meta {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand brand-link" href="/" aria-label="Ir al inicio">
+      <div class="brand-mark">TM</div>
+      <span>Ticketmaster Clone</span>
+    </a>
+    <div class="topbar-right">
+      <div class="topbar-actions">
+        <a class="auth-mini secondary" href="/">Inicio</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="payment-success-shell">
+    <section class="payment-success-card">
+      <div class="payment-success-head">
+        <span id="paymentStatusBadge" class="payment-status is-pending">Procesando pago</span>
+        <h1>Pago confirmado en Stripe</h1>
+        <p id="paymentSubtitle">Estamos verificando tu compra y preparando el detalle.</p>
+      </div>
+
+      <div class="payment-meta">
+        <div>
+          <span>Sesión</span>
+          <strong id="paymentSessionId">-</strong>
+        </div>
+        <div>
+          <span>Total</span>
+          <strong id="paymentTotal">$0.00</strong>
+        </div>
+        <div>
+          <span>Estado</span>
+          <strong id="paymentStatusText">Pendiente</strong>
+        </div>
+      </div>
+
+      <div>
+        <h2 style="margin:0 0 10px;">Lo que pagaste</h2>
+        <div id="paymentItems" class="payment-summary-list">
+          <div class="payment-item">Cargando detalle de pago...</div>
+        </div>
+      </div>
+
+      <div class="payment-actions">
+        <button id="refreshPayment" class="primary" type="button">Actualizar estado</button>
+        <a class="secondary" href="/">Volver al inicio</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/payment-success.js"></script>
+</body>
+</html>

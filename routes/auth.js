@@ -15,6 +15,14 @@ function isValidEmail(email) {
   return EMAIL_REGEX.test(normalizeEmail(email));
 }
 
+function getMinPasswordLengthByRole(role) {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  if (normalizedRole === 'organizer' || normalizedRole === 'admin') {
+    return 4;
+  }
+  return 6;
+}
+
 function getRequesterRoleFromAuthHeader(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Bearer ')) {
@@ -31,6 +39,26 @@ function getRequesterRoleFromAuthHeader(req) {
     return decoded?.role || null;
   } catch (err) {
     return null;
+  }
+}
+
+async function cleanupUserAccount(client, userId) {
+  await client.query('DELETE FROM tickets WHERE user_id = $1', [userId]);
+
+  try {
+    await client.query('UPDATE reports SET generated_by = NULL WHERE generated_by = $1', [userId]);
+  } catch (err) {
+    if (err.code !== '42P01') {
+      throw err;
+    }
+  }
+
+  try {
+    await client.query('UPDATE seats SET reserved_by = NULL, reserved_until = NULL WHERE reserved_by = $1', [userId]);
+  } catch (err) {
+    if (err.code !== '42P01') {
+      throw err;
+    }
   }
 }
 
@@ -61,6 +89,13 @@ router.post('/register', async (req, res) => {
   }
 
   const finalRole = canCreatePrivilegedUser ? requestedRole : 'user';
+  const minPasswordLength = getMinPasswordLengthByRole(finalRole);
+
+  if (String(password).length < minPasswordLength) {
+    return res.status(400).json({
+      error: `La contrasena para ${finalRole} debe tener al menos ${minPasswordLength} caracteres`,
+    });
+  }
 
   try {
     const hashed = await bcrypt.hash(password, 10);
@@ -104,7 +139,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+    const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
     const user = result.rows[0];
     if (!user) return res.status(400).json({ error: 'Credenciales inválidas' });
 
@@ -139,10 +174,6 @@ router.patch('/me', auth, async (req, res) => {
     return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
   }
 
-  if (wantsPasswordChange && nextPassword.length < 6) {
-    return res.status(400).json({ error: 'La nueva contrasena debe tener al menos 6 caracteres' });
-  }
-
   if (wantsPasswordChange && !currentPassword) {
     return res.status(400).json({ error: 'Debes ingresar tu contrasena actual' });
   }
@@ -160,6 +191,14 @@ router.patch('/me', auth, async (req, res) => {
     if (!user) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const minPasswordLength = getMinPasswordLengthByRole(user.role);
+    if (wantsPasswordChange && nextPassword.length < minPasswordLength) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `La nueva contrasena para ${user.role} debe tener al menos ${minPasswordLength} caracteres`,
+      });
     }
 
     let updatedPasswordHash = user.password_hash;
@@ -232,30 +271,77 @@ router.delete('/me', auth, async (req, res) => {
       return res.status(400).json({ error: 'Contraseña incorrecta' });
     }
 
-    // Remove owned tickets to satisfy foreign-key constraints.
-    await client.query('DELETE FROM tickets WHERE user_id = $1', [userId]);
-
-    // Best-effort cleanup for optional tables in some deployments.
-    try {
-      await client.query('UPDATE reports SET generated_by = NULL WHERE generated_by = $1', [userId]);
-    } catch (err) {
-      if (err.code !== '42P01') {
-        throw err;
-      }
-    }
-
-    try {
-      await client.query('UPDATE seats SET reserved_by = NULL, reserved_until = NULL WHERE reserved_by = $1', [userId]);
-    } catch (err) {
-      if (err.code !== '42P01') {
-        throw err;
-      }
-    }
-
+    await cleanupUserAccount(client, userId);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
 
     await client.query('COMMIT');
     return res.json({ message: 'Cuenta eliminada correctamente' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/users', auth, async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Solo un admin puede ver los usuarios' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role
+       FROM users
+       ORDER BY
+         CASE role
+           WHEN 'admin' THEN 1
+           WHEN 'organizer' THEN 2
+           ELSE 3
+         END,
+         name ASC`
+    );
+
+    return res.json({ users: result.rows });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/users/:id', auth, async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Solo un admin puede eliminar usuarios' });
+  }
+
+  const targetUserId = String(req.params.id || '').trim();
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'Debes indicar un usuario valido' });
+  }
+
+  if (String(req.user?.id || '') === targetUserId) {
+    return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta desde este panel' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      'SELECT id FROM users WHERE id = $1 FOR UPDATE',
+      [targetUserId]
+    );
+    const targetUser = userResult.rows[0];
+
+    if (!targetUser) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    await cleanupUserAccount(client, targetUserId);
+    await client.query('DELETE FROM users WHERE id = $1', [targetUserId]);
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Usuario eliminado correctamente' });
   } catch (err) {
     await client.query('ROLLBACK');
     return res.status(500).json({ error: err.message });

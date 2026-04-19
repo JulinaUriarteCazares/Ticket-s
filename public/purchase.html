@@ -15,11 +15,7 @@
         </a>
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
-            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
-                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
-                <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
-                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
-            </div>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
                 <button id="cartTopButton" class="auth-mini secondary hidden" type="button">Carrito (0)</button>
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
@@ -174,9 +170,6 @@
         const downloadAllTicketsButton = document.getElementById('downloadAllTickets');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
-        const boletosMenuButton = document.getElementById('boletosMenuButton');
-        const settingsMenuButton = document.getElementById('settingsMenuButton');
-        const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
@@ -295,19 +288,36 @@
             sessionMenuButton.setAttribute('aria-expanded', 'true');
         }
 
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            const menuItems = [];
+            if (isRegularUser()) {
+                menuItems.push('<button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>');
+            }
+            menuItems.push('<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>');
+            menuItems.push('<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>');
+            sessionMenu.innerHTML = menuItems.join('');
+        }
+
         function setTopbarUi() {
             if (state.user) {
                 sessionMenuButton.textContent = state.user.name || 'Usuario';
                 sessionMenuButton.classList.remove('hidden');
-                cartTopButton.classList.remove('hidden');
+                cartTopButton.classList.toggle('hidden', !isRegularUser());
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
+                renderSessionMenu();
             } else {
                 sessionMenuButton.textContent = 'Sin sesion activa';
                 sessionMenuButton.classList.add('hidden');
                 cartTopButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
+                sessionMenu.innerHTML = '';
                 closeSessionMenu();
             }
 
@@ -1310,44 +1320,18 @@
         }
 
         async function confirmSeatWizardPurchase() {
-            const purchaseSnapshot = [];
-            const successfulKeys = new Set();
-            const purchasedTickets = [];
-            let success = 0;
-            let failed = 0;
+            const checkoutItems = [];
 
             for (const item of state.seatWizard.autoItems || []) {
-                try {
-                    const result = await apiCall('POST', '/tickets/purchase', {
-                        ticket_type_id: item.ticketTypeId,
-                        quantity: item.quantity,
-                    });
-
-                    success += Number(result.quantity || item.quantity || 0);
-                    successfulKeys.add(getSeatWizardItemKey(item));
-                    purchaseSnapshot.push({
-                        eventId: item.eventId,
-                        eventName: item.eventName || '',
-                        typeName: item.typeName,
-                        quantity: Number(result.quantity || item.quantity || 0),
-                        unitPrice: Number(item.unitPrice),
-                    });
-
-                    if (Array.isArray(result.tickets)) {
-                        purchasedTickets.push(...result.tickets.map((ticket) => ({
-                            ...ticket,
-                            event: result.event || state.event,
-                            ticketType: result.ticketType || null,
-                            unitPrice: result.ticketType?.unit_price ?? item.unitPrice,
-                        })));
-                    }
-                } catch (err) {
-                    failed += 1;
-                    notify(err.message || `No se pudo completar ${item.typeName}`, 'err');
-                }
+                checkoutItems.push({
+                    ticketTypeId: item.ticketTypeId,
+                    eventId: item.eventId,
+                    quantity: item.quantity,
+                    seatLabels: [],
+                });
             }
 
-            for (const item of state.seatWizard.items) {
+            for (const item of state.seatWizard.items || []) {
                 const key = getSeatWizardItemKey(item);
                 const seatLabels = state.seatWizard.selectedByType[key] || [];
 
@@ -1356,66 +1340,34 @@
                     return;
                 }
 
-                try {
-                    const result = await apiCall('POST', '/tickets/purchase-with-seats', {
-                        ticket_type_id: item.ticketTypeId,
-                        seat_labels: seatLabels,
-                    });
+                checkoutItems.push({
+                    ticketTypeId: item.ticketTypeId,
+                    eventId: item.eventId,
+                    quantity: item.quantity,
+                    seatLabels,
+                });
+            }
 
-                    success += Number(result.quantity || seatLabels.length);
-                    successfulKeys.add(key);
-                    purchaseSnapshot.push({
-                        eventId: item.eventId,
-                        eventName: item.eventName || '',
-                        typeName: item.typeName,
-                        quantity: seatLabels.length,
-                        unitPrice: Number(item.unitPrice),
-                    });
+            if (!checkoutItems.length) {
+                notify('No hay boletos para pagar', 'err');
+                return;
+            }
 
-                    if (Array.isArray(result.tickets)) {
-                        purchasedTickets.push(...result.tickets.map((ticket) => ({
-                            ...ticket,
-                            event: result.event || state.event,
-                            ticketType: result.ticketType || null,
-                            unitPrice: result.ticketType?.unit_price ?? item.unitPrice,
-                        })));
-                    }
-                } catch (err) {
-                    failed += 1;
-                    notify(err.message || `No se pudo completar ${item.typeName}`, 'err');
+            try {
+                const session = await apiCall('POST', '/payments/create-checkout-session', {
+                    items: checkoutItems,
+                });
+
+                if (!session?.url) {
+                    throw new Error('No se pudo iniciar el pago con Stripe');
                 }
+
+                notify('Redirigiendo a Stripe para completar el pago', 'ok');
+                closeSeatWizard();
+                window.location.href = session.url;
+            } catch (err) {
+                notify(err.message || 'No se pudo iniciar el pago', 'err');
             }
-
-            state.cart = state.cart.filter((item) => !successfulKeys.has(getSeatWizardItemKey(item)));
-            saveCartToStorage();
-            renderCart();
-            closeSeatWizard();
-
-            if (success > 0) {
-                const summaryItems = purchaseSnapshot
-                    .map((item) => {
-                        const subtotal = item.quantity * item.unitPrice;
-                        return `<li><strong>${item.eventName || `Evento ${item.eventId}`}</strong> · ${item.typeName} - ${item.quantity} x $${formatMoney(item.unitPrice)} = $${formatMoney(subtotal)}</li>`;
-                    })
-                    .join('');
-                const summaryTotal = purchaseSnapshot
-                    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-                const summaryHtml = `
-                    <h3>Resumen de tu compra</h3>
-                    <ul>${summaryItems}</ul>
-                    <p class="purchase-success-total">Total pagado: $${formatMoney(summaryTotal)}</p>
-                `;
-
-                notify('Compra completada', 'ok');
-                showPurchaseSuccess(`Tu compra fue exitosa. Se procesaron ${success} boleto(s).`, summaryHtml);
-                renderPurchasedTickets(purchasedTickets);
-            }
-
-            if (failed > 0) {
-                notify(`No se pudieron comprar ${failed} tipo(s) de boleto`, 'err');
-            }
-
-            await loadEvent();
         }
 
         async function checkoutCart() {
@@ -1561,16 +1513,27 @@
                 event.stopPropagation();
                 toggleSessionMenu();
             });
-            boletosMenuButton.addEventListener('click', () => {
-                closeSessionMenu();
-                window.location.href = '/';
-            });
-            settingsMenuButton.addEventListener('click', () => {
-                closeSessionMenu();
-                window.location.href = '/settings.html';
-            });
-            logoutMenuButton.addEventListener('click', async () => {
-                await logoutHandler();
+            sessionMenu.addEventListener('click', async (event) => {
+                const button = event.target.closest('button');
+                if (!button) {
+                    return;
+                }
+
+                if (button.id === 'boletosMenuButton') {
+                    closeSessionMenu();
+                    window.location.href = '/';
+                    return;
+                }
+
+                if (button.id === 'settingsMenuButton') {
+                    closeSessionMenu();
+                    window.location.href = '/settings.html';
+                    return;
+                }
+
+                if (button.id === 'logoutMenuButton') {
+                    await logoutHandler();
+                }
             });
             const loginModal = document.getElementById('loginModal');
             const registerModal = document.getElementById('registerModal');
@@ -1661,11 +1624,14 @@
                 if (exists) {
                     state.seatWizard.selectedByType[key] = selected.filter((seat) => seat !== label);
                 } else {
-                    if (selected.length >= item.quantity) {
+                    if (Number(item.quantity) === 1) {
+                        state.seatWizard.selectedByType[key] = [label];
+                    } else if (selected.length >= item.quantity) {
                         notify(`Solo puedes elegir ${item.quantity} asiento(s)`, 'info');
                         return;
+                    } else {
+                        state.seatWizard.selectedByType[key] = [...selected, label];
                     }
-                    state.seatWizard.selectedByType[key] = [...selected, label];
                 }
 
                 renderSeatButtonsForCurrentItem();

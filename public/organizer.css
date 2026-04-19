@@ -76,12 +76,53 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+    position: relative;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 .topbar-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    margin-left: 6px;
+    min-width: 0;
+}
+
+.session-menu-trigger {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.session-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 190px;
+    border: 1px solid #d8cfbe;
+    border-radius: 10px;
+    background: #fffdf8;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    z-index: 30;
+}
+
+.session-menu-item {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #1d2027;
+    text-align: left;
+    padding: 9px 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.session-menu-item:hover {
+    background: #f3eee3;
 }
 
 .auth-mini {

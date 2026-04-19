@@ -13,11 +13,11 @@
             <span>Ticketmaster Clone</span>
         </a>
         <div class="topbar-right">
-            <div id="sessionLabel" class="session-pill hidden">Sin sesion activa</div>
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
                 <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
-                <button id="logoutTopButton" class="auth-mini secondary hidden" type="button">Cerrar sesion</button>
             </div>
         </div>
     </header>
@@ -182,8 +182,8 @@
         const registerModal = document.getElementById('registerModal');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
-        const logoutTopButton = document.getElementById('logoutTopButton');
-        const sessionLabel = document.getElementById('sessionLabel');
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
         const adminInsightsSection = document.getElementById('adminInsightsSection');
@@ -285,13 +285,45 @@
             }, 3500);
         }
 
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            sessionMenu.innerHTML = [
+                '<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>',
+                '<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>',
+            ].join('');
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
         function setAuthUi() {
             if (state.user) {
-                sessionLabel.textContent = `Sesion: ${state.user.name} (${state.user.role})`;
-                sessionLabel.classList.remove('hidden');
+                sessionMenuButton.textContent = `${state.user.name}`;
+                sessionMenuButton.classList.remove('hidden');
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
-                logoutTopButton.classList.remove('hidden');
+                renderSessionMenu();
                 if (state.user.role === 'organizer' || state.user.role === 'admin') {
                     document.getElementById('heroBanner').classList.add('hero-organizer');
                     document.getElementById('heroTitle').textContent = `Bienvenido, ${state.user.name}`;
@@ -303,11 +335,12 @@
                 }
             } else {
                 const defaultHero = getDefaultHeroContent();
-                sessionLabel.textContent = 'Sin sesion activa';
-                sessionLabel.classList.add('hidden');
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
-                logoutTopButton.classList.add('hidden');
+                sessionMenu.innerHTML = '';
+                closeSessionMenu();
                 document.getElementById('heroBanner').classList.toggle('hero-organizer', defaultHero.organizer);
                 document.getElementById('heroTitle').textContent = defaultHero.title;
                 document.getElementById('heroCopy').textContent = defaultHero.copy;
@@ -687,11 +720,11 @@
             const confirmPassword = document.getElementById('regPasswordConfirm').value;
             const role = state.user?.role === 'admin' ? document.getElementById('regRole').value : 'user';
 
+            closeSessionMenu();
             if (!name || !email || !password || !confirmPassword) {
                 notify('Completa todos los campos para registrar', 'err');
                 return;
             }
-
             if (password !== confirmPassword) {
                 notify('Las contrasenas no coinciden', 'err');
                 return;
@@ -778,8 +811,28 @@
 
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);
+        sessionMenuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSessionMenu();
+        });
+        sessionMenu.addEventListener('click', async (event) => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+
+            if (button.id === 'settingsMenuButton') {
+                closeSessionMenu();
+                window.location.href = '/settings.html';
+                return;
+            }
+
+            if (button.id === 'logoutMenuButton') {
+                closeSessionMenu();
+                await logoutHandler();
+            }
+        });
         createEventButton.addEventListener('click', openCreateEventModal);
-        logoutTopButton.addEventListener('click', logoutHandler);
         document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
         document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
         document.getElementById('closeCreateEventIcon').addEventListener('click', closeCreateEventModal);
@@ -810,6 +863,11 @@
         });
         eventImageDropzone.addEventListener('dragleave', () => {
             eventImageDropzone.classList.remove('is-dragover');
+        });
+        document.addEventListener('click', (event) => {
+            if (!sessionMenu.contains(event.target) && event.target !== sessionMenuButton) {
+                closeSessionMenu();
+            }
         });
         eventImageDropzone.addEventListener('drop', (event) => {
             event.preventDefault();
