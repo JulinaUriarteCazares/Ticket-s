@@ -1458,9 +1458,15 @@
             const name = document.getElementById('regName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regPasswordConfirm').value;
 
-            if (!name || !email || !password) {
-                notify('Completa nombre, correo y contrasena', 'err');
+            if (!name || !email || !password || !confirmPassword) {
+                notify('Completa todos los campos para registrar', 'err');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                notify('Las contrasenas no coinciden', 'err');
                 return;
             }
 

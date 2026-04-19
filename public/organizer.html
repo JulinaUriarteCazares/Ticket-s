@@ -85,6 +85,8 @@
                 <input id="regEmail" type="email" placeholder="Ingresa correo" autocomplete="off" autocapitalize="off" spellcheck="false">
                 <label class="field-label" for="regPassword">Contrasena</label>
                 <input id="regPassword" type="password" placeholder="******" autocomplete="new-password">
+                <label class="field-label" for="regPasswordConfirm">Confirmar contrasena</label>
+                <input id="regPasswordConfirm" type="password" placeholder="******" autocomplete="new-password">
                 <div id="regRoleWrap" class="full hidden">
                     <label class="field-label" for="regRole">Rol</label>
                     <select id="regRole">
@@ -682,10 +684,16 @@
             const name = document.getElementById('regName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regPasswordConfirm').value;
             const role = state.user?.role === 'admin' ? document.getElementById('regRole').value : 'user';
 
-            if (!name || !email || !password) {
-                notify('Completa nombre, correo y contrasena para registrar', 'err');
+            if (!name || !email || !password || !confirmPassword) {
+                notify('Completa todos los campos para registrar', 'err');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                notify('Las contrasenas no coinciden', 'err');
                 return;
             }
 

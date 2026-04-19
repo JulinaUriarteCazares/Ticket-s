@@ -38,6 +38,8 @@
                     <input id="regEmail" type="email" placeholder="Ingresa correo" autocomplete="off" autocapitalize="off" spellcheck="false">
                     <label class="field-label" for="regPassword">Contrasena</label>
                     <input id="regPassword" type="password" placeholder="******" autocomplete="new-password">
+                    <label class="field-label" for="regPasswordConfirm">Confirmar contrasena</label>
+                    <input id="regPasswordConfirm" type="password" placeholder="******" autocomplete="new-password">
                     <div id="regRoleWrap" class="full hidden">
                         <label class="field-label" for="regRole">Rol</label>
                         <select id="regRole">
@@ -90,10 +92,12 @@
         const name = document.getElementById('regName');
         const email = document.getElementById('regEmail');
         const password = document.getElementById('regPassword');
+        const confirmPassword = document.getElementById('regPasswordConfirm');
         const role = document.getElementById('regRole');
         if (name) name.value = '';
         if (email) email.value = '';
         if (password) password.value = '';
+        if (confirmPassword) confirmPassword.value = '';
         if (role) role.value = 'user';
     }
 
