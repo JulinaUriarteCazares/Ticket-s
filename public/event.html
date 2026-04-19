@@ -59,6 +59,9 @@
                             <h2>Informe del evento</h2>
                             <p class="ticket-summary">Resumen financiero para administrador.</p>
                         </div>
+                        <div class="section-title-actions">
+                            <button id="downloadAdminEventPdf" class="image-btn" type="button">Descargar PDF</button>
+                        </div>
                     </div>
                     <div id="adminEventReportRoot" class="admin-event-report"></div>
                 </section>
@@ -296,6 +299,43 @@
 
         function isAdmin() {
             return state.user && state.user.role === 'admin';
+        }
+
+        async function downloadAdminEventReportPdf() {
+            if (!isAdmin()) {
+                notify('No autorizado para descargar este informe', 'err');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/events/${state.eventId}/admin-report/pdf`, {
+                    method: 'GET',
+                    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'No se pudo generar el PDF';
+                    try {
+                        const data = await response.json();
+                        errorMessage = data.error || errorMessage;
+                    } catch (err) {
+                        // ignore
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `reporte-evento-${state.eventId}.pdf`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                notify(err.message, 'err');
+            }
         }
 
         function canUseCheckoutAsViewer() {
@@ -927,6 +967,7 @@
         document.getElementById('saveEvent').addEventListener('click', saveEvent);
         imageQuickAction.addEventListener('click', () => imagePicker.click());
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
+        document.getElementById('downloadAdminEventPdf').addEventListener('click', downloadAdminEventReportPdf);
         deactivateEventInlineBtn.addEventListener('click', deactivateEventInline);
         imagePicker.addEventListener('change', handleImageSelection);
         goToCheckout.addEventListener('click', () => {

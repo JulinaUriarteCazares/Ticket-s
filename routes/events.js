@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const auth = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
+const puppeteer = require('puppeteer');
 
 const router = express.Router();
 
@@ -160,6 +161,15 @@ function canViewRestrictedEvent(user, event) {
   return user.role === 'admin' || user.role === 'organizer' || String(user.id) === String(event.organizer_id);
 }
 
+function escapeHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function buildEventAdminReport(eventId) {
   const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [eventId]);
   if (eventResult.rows.length === 0) {
@@ -250,6 +260,108 @@ router.get('/:id/admin-report', auth, async (req, res) => {
     }
 
     res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/admin-report/pdf', auth, async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const report = await buildEventAdminReport(id);
+    if (!report) {
+      return res.status(404).json({ error: 'Evento no encontrado' });
+    }
+
+    const event = report.event;
+    const eventDate = event.event_date ? new Date(event.event_date).toLocaleDateString('es-MX') : 'Fecha por confirmar';
+    const eventTime = event.event_time ? ` ${event.event_time}` : '';
+    const statusLabel = event.active === false ? 'Inactivo' : 'Activo';
+    const htmlRows = report.ticket_types.map((type) => {
+      const sold = Number(type.sold || 0);
+      const unsold = Math.max(Number(type.capacity || 0) - sold, 0);
+      const income = sold * Number(type.price || 0);
+      return `
+        <tr>
+          <td>${escapeHtml(type.type_name)}</td>
+          <td>${Number(type.capacity || 0)}</td>
+          <td>${sold}</td>
+          <td>${unsold}</td>
+          <td>$${income.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const totalIncome = Number(report.total_income || 0);
+    const artistFee = Number(event.artist_fee || 0);
+    const balance = totalIncome - artistFee;
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; color: #111; padding: 28px; }
+          h1 { margin: 0 0 6px; font-size: 24px; }
+          .muted { color: #666; font-size: 12px; margin-bottom: 14px; }
+          .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0 18px; }
+          .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+          .card span { display: block; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .04em; }
+          .card strong { display: block; margin-top: 4px; font-size: 18px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 12px; }
+          th { background: #f5f5f5; }
+          .footer { margin-top: 18px; font-size: 12px; color: #555; }
+        </style>
+      </head>
+      <body>
+        <h1>Estado de cuenta del evento</h1>
+        <div class="muted">${escapeHtml(event.name || 'Evento')} | ${escapeHtml(`${eventDate}${eventTime} | ${event.location || 'Ubicacion por confirmar'}`)} | ${escapeHtml(statusLabel)}</div>
+        <div class="summary">
+          <div class="card"><span>Boletos vendidos</span><strong>${Number(report.total_tickets_sold || 0)}</strong></div>
+          <div class="card"><span>Boletos no vendidos</span><strong>${Number(report.tickets_unsold || 0)}</strong></div>
+          <div class="card"><span>Total de ventas</span><strong>$${totalIncome.toFixed(2)}</strong></div>
+          <div class="card"><span>Tarifa del artista</span><strong>$${artistFee.toFixed(2)}</strong></div>
+          <div class="card"><span>Ganancia neta</span><strong>$${balance.toFixed(2)}</strong></div>
+          <div class="card"><span>Potencial no vendido</span><strong>$${Number(report.unsold_potential || 0).toFixed(2)}</strong></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Capacidad</th>
+              <th>Vendidos</th>
+              <th>No vendidos</th>
+              <th>Ingreso</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${htmlRows || '<tr><td colspan="5">Sin tipos de boleto</td></tr>'}
+          </tbody>
+        </table>
+        <div class="footer">Reporte generado por Ticketmaster Clone.</div>
+      </body>
+      </html>
+    `;
+
+    const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '18mm', right: '14mm', bottom: '18mm', left: '14mm' } });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte-evento-${escapeHtml(event.name || 'evento').replace(/[^a-zA-Z0-9_-]+/g, '-')}.pdf"`);
+      res.send(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
