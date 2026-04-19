@@ -121,34 +121,42 @@
             </div>
             <div class="grid">
                 <div class="lock-field full">
+                    <label class="lock-label" for="editName">Nombre del evento</label>
                     <input id="editName" type="text" placeholder="Nombre del evento">
                     <button type="button" class="lock-toggle" data-lock-target="editName">Desbloquear</button>
                 </div>
                 <div class="lock-field full">
+                    <label class="lock-label" for="editLocation">Lugar</label>
                     <input id="editLocation" type="text" placeholder="Lugar">
                     <button type="button" class="lock-toggle" data-lock-target="editLocation">Desbloquear</button>
                 </div>
                 <div class="lock-field">
+                    <label class="lock-label" for="editDate">Fecha</label>
                     <input id="editDate" type="date">
                     <button type="button" class="lock-toggle" data-lock-target="editDate">Desbloquear</button>
                 </div>
                 <div class="lock-field">
+                    <label class="lock-label" for="editTime">Hora</label>
                     <input id="editTime" type="time">
                     <button type="button" class="lock-toggle" data-lock-target="editTime">Desbloquear</button>
                 </div>
                 <div class="lock-field">
+                    <label class="lock-label" for="editCapacity">Capacidad</label>
                     <input id="editCapacity" type="number" min="1" placeholder="Capacidad">
                     <button type="button" class="lock-toggle" data-lock-target="editCapacity">Desbloquear</button>
                 </div>
                 <div class="lock-field">
+                    <label class="lock-label" for="editArtist">Artista</label>
                     <input id="editArtist" type="text" placeholder="Artista">
                     <button type="button" class="lock-toggle" data-lock-target="editArtist">Desbloquear</button>
                 </div>
                 <div class="lock-field">
+                    <label class="lock-label" for="editFee">Tarifa del artista</label>
                     <input id="editFee" type="number" min="0" step="0.01" placeholder="Tarifa artista">
                     <button type="button" class="lock-toggle" data-lock-target="editFee">Desbloquear</button>
                 </div>
                 <div class="lock-field full">
+                    <label class="lock-label" for="editDescription">Descripcion</label>
                     <textarea id="editDescription" rows="3" placeholder="Descripcion"></textarea>
                     <button type="button" class="lock-toggle" data-lock-target="editDescription">Desbloquear</button>
                 </div>
@@ -167,14 +175,23 @@
             </div>
             <p class="helper">Categorias disponibles: General/Normal, Numerado, VIP y Platino.</p>
             <div class="grid">
-                <select id="newTicketTypeName">
-                    <option value="General/Normal">General/Normal</option>
-                    <option value="Numerado">Numerado</option>
-                    <option value="VIP">VIP</option>
-                    <option value="Platino">Platino</option>
-                </select>
-                <input id="newTicketPrice" type="number" min="0" step="0.01" placeholder="Precio">
-                <input id="newTicketCapacity" type="number" min="1" placeholder="Capacidad">
+                <div class="modal-field full">
+                    <label class="modal-field-label" for="newTicketTypeName">Tipo de boleto</label>
+                    <select id="newTicketTypeName">
+                        <option value="General/Normal">General/Normal</option>
+                        <option value="Numerado">Numerado</option>
+                        <option value="VIP">VIP</option>
+                        <option value="Platino">Platino</option>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label class="modal-field-label" for="newTicketPrice">Precio</label>
+                    <input id="newTicketPrice" type="number" min="0" step="0.01" placeholder="Precio">
+                </div>
+                <div class="modal-field">
+                    <label class="modal-field-label" for="newTicketCapacity">Capacidad</label>
+                    <input id="newTicketCapacity" type="number" min="1" placeholder="Capacidad">
+                </div>
             </div>
             <div class="actions">
                 <button id="createTicketType" type="button">Guardar boleto</button>

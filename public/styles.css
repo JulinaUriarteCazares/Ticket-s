@@ -562,6 +562,22 @@ main {
 
 .full { grid-column: 1 / -1; }
 
+.modal-field {
+    display: grid;
+    gap: 6px;
+}
+
+.modal-field.full {
+    grid-column: 1 / -1;
+}
+
+.modal-field-label {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b6254;
+}
+
 input,
 textarea,
 button,
@@ -667,6 +683,14 @@ select {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     align-items: stretch;
+}
+
+.lock-label {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b6254;
 }
 
 .lock-field.full {
