@@ -86,10 +86,6 @@
                     </div>
                 </section>
 
-                <div class="event-bottom-cta">
-                    <button id="goToCheckout" class="get-tickets-btn hidden" type="button">Conseguir boletos</button>
-                </div>
-
                 <div id="editPanel" class="edit-subpanel hidden">
                     <div class="manager-box">
                         <h3>Resumen del evento</h3>
@@ -104,6 +100,10 @@
                             <button id="deleteEvent" type="button" class="delete-event">Eliminar evento completo</button>
                         </div>
                     </div>
+                </div>
+
+                <div class="event-bottom-cta hidden" id="eventBottomCtaWrap">
+                    <button id="goToCheckout" class="get-tickets-btn hidden" type="button">Conseguir boletos</button>
                 </div>
 
                 <input id="imagePicker" class="hidden" type="file" accept="image/*">
@@ -210,6 +210,7 @@
         const eventCartPanel = document.getElementById('eventCartPanel');
         const eventCartItems = document.getElementById('eventCartItems');
         const eventCartTotal = document.getElementById('eventCartTotal');
+        const eventBottomCtaWrap = document.getElementById('eventBottomCtaWrap');
         const eventFieldIds = [
             'editName',
             'editLocation',
@@ -389,6 +390,7 @@
             imageQuickAction.classList.toggle('hidden', !editable);
             quickEditEvent.classList.toggle('hidden', !editable);
             openTicketCreatorInline.classList.toggle('hidden', !editable);
+            eventBottomCtaWrap.classList.toggle('hidden', !viewer || visibleRows.length === 0);
             goToCheckout.classList.toggle('hidden', !viewer || visibleRows.length === 0);
             ticketCheckoutSection.classList.toggle('hidden', !viewer || !state.checkoutOpen || visibleRows.length === 0);
             eventCartPanel.classList.toggle('hidden', !canBuy || !state.checkoutOpen);
