@@ -33,6 +33,46 @@
             <p class="meta" style="margin:0;">Gestiona tu cuenta.</p>
 
             <section class="danger-box" style="display:grid; gap:10px;">
+                <h2 style="margin:0; font-size:22px;">Perfil</h2>
+                <p class="helper" style="margin:0;">Actualiza tu nombre visible de cuenta.</p>
+
+                <div class="grid">
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="profileName">Nombre de usuario</label>
+                        <input id="profileName" type="text" placeholder="Tu nombre" autocomplete="name">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="saveProfileButton" type="button">Guardar nombre</button>
+                </div>
+            </section>
+
+            <section class="danger-box" style="display:grid; gap:10px;">
+                <h2 style="margin:0; font-size:22px;">Seguridad</h2>
+                <p class="helper" style="margin:0;">Cambia tu contrasena de acceso.</p>
+
+                <div class="grid">
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="currentPassword">Contrasena actual</label>
+                        <input id="currentPassword" type="password" placeholder="Tu contrasena actual" autocomplete="current-password">
+                    </div>
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="newPassword">Nueva contrasena</label>
+                        <input id="newPassword" type="password" placeholder="Minimo 6 caracteres" autocomplete="new-password">
+                    </div>
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="confirmNewPassword">Confirmar nueva contrasena</label>
+                        <input id="confirmNewPassword" type="password" placeholder="Repite la nueva contrasena" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="savePasswordButton" type="button">Cambiar contrasena</button>
+                </div>
+            </section>
+
+            <section class="danger-box" style="display:grid; gap:10px;">
                 <h2 style="margin:0; font-size:22px;">Eliminar cuenta</h2>
                 <p class="helper" style="margin:0;">Esta accion es permanente. Se eliminaran tus boletos y tu usuario.</p>
 
@@ -166,6 +206,64 @@
             }
         }
 
+        function isValidEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+        }
+
+        async function updateProfileName() {
+            const nameInput = document.getElementById('profileName');
+            const nextName = String(nameInput?.value || '').trim();
+
+            if (!nextName) {
+                notify('Ingresa un nombre valido', 'err');
+                return;
+            }
+
+            try {
+                const result = await apiCall('PATCH', '/auth/me', { name: nextName });
+                state.user = result.user || { ...state.user, name: nextName };
+                localStorage.setItem('tm_user', JSON.stringify(state.user));
+                setTopbarUi();
+                notify('Nombre actualizado correctamente', 'ok');
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function updatePassword() {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+            if (!currentPassword || !newPassword || !confirmNewPassword) {
+                notify('Completa todos los campos de contrasena', 'err');
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                notify('La nueva contrasena debe tener al menos 6 caracteres', 'err');
+                return;
+            }
+
+            if (newPassword !== confirmNewPassword) {
+                notify('La confirmacion no coincide con la nueva contrasena', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('PATCH', '/auth/me', {
+                    current_password: currentPassword,
+                    new_password: newPassword,
+                });
+                document.getElementById('currentPassword').value = '';
+                document.getElementById('newPassword').value = '';
+                document.getElementById('confirmNewPassword').value = '';
+                notify('Contrasena actualizada correctamente', 'ok');
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
         async function deleteAccount() {
             const password = document.getElementById('deletePassword').value;
             const confirmText = document.getElementById('deleteConfirmText').value;
@@ -218,6 +316,8 @@
                 return;
             }
 
+            document.getElementById('profileName').value = state.user?.name || '';
+
             setTopbarUi();
 
             sessionMenuButton.addEventListener('click', (event) => {
@@ -238,6 +338,8 @@
                 await logoutHandler();
             });
 
+            document.getElementById('saveProfileButton').addEventListener('click', updateProfileName);
+            document.getElementById('savePasswordButton').addEventListener('click', updatePassword);
             document.getElementById('deleteAccountButton').addEventListener('click', deleteAccount);
             document.getElementById('cancelDeleteButton').addEventListener('click', () => {
                 window.history.back();

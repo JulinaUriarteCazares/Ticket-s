@@ -5,6 +5,15 @@ const pool = require('../db');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return EMAIL_REGEX.test(normalizeEmail(email));
+}
 
 function getRequesterRoleFromAuthHeader(req) {
   const header = req.headers.authorization || '';
@@ -27,9 +36,15 @@ function getRequesterRoleFromAuthHeader(req) {
 
 router.post('/register', async (req, res) => {
   const { name, email, password, role = 'user' } = req.body;
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedName = String(name || '').trim();
 
-  if (!name || !email || !password) {
+  if (!normalizedName || !normalizedEmail || !password) {
     return res.status(400).json({ error: 'Nombre, email y contraseña son obligatorios' });
+  }
+
+  if (!isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Debes ingresar un correo electronico valido' });
   }
 
   const allowedRoles = ['user', 'organizer', 'admin'];
@@ -51,9 +66,24 @@ router.post('/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const result = await pool.query(
       'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-      [name, email, hashed, finalRole]
+      [normalizedName, normalizedEmail, hashed, finalRole]
     );
-    res.status(201).json(result.rows[0]);
+    const createdUser = result.rows[0];
+
+    // Auto-login only for first-party self registration (no authenticated requester).
+    if (!requesterRole) {
+      const token = jwt.sign({ id: createdUser.id, role: createdUser.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+      return res.status(201).json({
+        message: 'Registro exitoso',
+        token,
+        user: createdUser,
+      });
+    }
+
+    return res.status(201).json({
+      message: 'Usuario creado correctamente',
+      user: createdUser,
+    });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'El correo ya está registrado' });
     if (err.code === '42P01') return res.status(500).json({ error: 'La tabla users no existe en la base de datos' });
@@ -63,13 +93,18 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
   }
 
+  if (!isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Debes ingresar un correo electronico valido' });
+  }
+
   try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
     const user = result.rows[0];
     if (!user) return res.status(400).json({ error: 'Credenciales inválidas' });
 
@@ -80,6 +115,84 @@ router.post('/login', async (req, res) => {
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/me', auth, async (req, res) => {
+  const { name, current_password: currentPassword, new_password: newPassword } = req.body || {};
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  const nextName = String(name || '').trim();
+  const nextPassword = String(newPassword || '');
+  const wantsNameChange = Boolean(nextName);
+  const wantsPasswordChange = Boolean(nextPassword);
+
+  if (!wantsNameChange && !wantsPasswordChange) {
+    return res.status(400).json({ error: 'No hay cambios para actualizar' });
+  }
+
+  if (wantsNameChange && nextName.length < 2) {
+    return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
+  }
+
+  if (wantsPasswordChange && nextPassword.length < 6) {
+    return res.status(400).json({ error: 'La nueva contrasena debe tener al menos 6 caracteres' });
+  }
+
+  if (wantsPasswordChange && !currentPassword) {
+    return res.status(400).json({ error: 'Debes ingresar tu contrasena actual' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      'SELECT id, name, email, role, password_hash FROM users WHERE id = $1 FOR UPDATE',
+      [userId]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    let updatedPasswordHash = user.password_hash;
+    if (wantsPasswordChange) {
+      const validPassword = await bcrypt.compare(String(currentPassword), String(user.password_hash));
+      if (!validPassword) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Contrasena actual incorrecta' });
+      }
+      updatedPasswordHash = await bcrypt.hash(nextPassword, 10);
+    }
+
+    const updatedName = wantsNameChange ? nextName : user.name;
+
+    const updateResult = await client.query(
+      `UPDATE users
+       SET name = $2,
+           password_hash = $3
+       WHERE id = $1
+       RETURNING id, name, email, role`,
+      [userId, updatedName, updatedPasswordHash]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      message: 'Perfil actualizado correctamente',
+      user: updateResult.rows[0],
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

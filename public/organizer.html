@@ -654,6 +654,11 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
                 const result = await apiCall('POST', '/auth/login', { email, password });
                 state.token = result.token;
@@ -684,8 +689,30 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
-                await apiCall('POST', '/auth/register', { name, email, password, role });
+                const result = await apiCall('POST', '/auth/register', { name, email, password, role });
+
+                if (result?.token && result?.user) {
+                    state.token = result.token;
+                    state.user = result.user;
+                    localStorage.setItem('tm_token', result.token);
+                    localStorage.setItem('tm_user', JSON.stringify(result.user));
+                    closeRegisterModal();
+                    if (syncRoleRoute()) {
+                        return;
+                    }
+                    setAuthUi();
+                    notify(`Bienvenido ${result.user.name}`, 'ok');
+                    await loadEvents();
+                    await loadAdminInsights();
+                    return;
+                }
+
                 notify('Registro exitoso, ahora inicia sesion', 'ok');
                 closeRegisterModal();
                 openLoginModal();

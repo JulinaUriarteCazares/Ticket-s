@@ -1236,6 +1236,11 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
                 const data = await apiCall('POST', '/auth/login', { email, password });
                 state.token = data.token;
@@ -1263,8 +1268,28 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
-                await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+                const data = await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+
+                if (data?.token && data?.user) {
+                    state.token = data.token;
+                    state.user = data.user;
+                    localStorage.setItem('tm_token', data.token);
+                    localStorage.setItem('tm_user', JSON.stringify(data.user));
+                    if (typeof window.closeRegisterModal === 'function') {
+                        window.closeRegisterModal();
+                    }
+                    setTopbarUi();
+                    notify(`Bienvenido ${data.user.name}`, 'ok');
+                    await loadEvent();
+                    return;
+                }
+
                 notify('Cuenta creada. Inicia sesion para continuar', 'ok');
                 if (typeof window.closeRegisterModal === 'function' && typeof window.openLoginModal === 'function') {
                     window.closeRegisterModal();

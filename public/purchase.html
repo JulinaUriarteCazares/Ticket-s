@@ -89,9 +89,12 @@
                     <span><i class="seat-dot seat-dot-available"></i>Disponible</span>
                     <span><i class="seat-dot seat-dot-occupied"></i>Ocupado</span>
                 </div>
-                <div class="seat-screen">Pantalla | Sala</div>
+                <div class="seat-screen">Escenario</div>
                 <div id="seatTypeBands" class="seat-type-bands"></div>
-                <div id="seatPickerGrid" class="seat-picker-grid"></div>
+                <div class="seat-layout-wrap">
+                    <div id="seatPickerGrid" class="seat-picker-grid"></div>
+                    <aside id="seatMiniMap" class="seat-mini-map" aria-label="Croquis de referencia de zonas"></aside>
+                </div>
                 <div class="seat-picker-footer">
                     <strong id="seatPickerCount">0 seleccionados</strong>
                     <div class="seat-picker-actions">
@@ -158,6 +161,7 @@
         const seatPickerMeta = document.getElementById('seatPickerMeta');
         const seatTypeBands = document.getElementById('seatTypeBands');
         const seatPickerGrid = document.getElementById('seatPickerGrid');
+        const seatMiniMap = document.getElementById('seatMiniMap');
         const seatPickerCount = document.getElementById('seatPickerCount');
         const seatPickerPrev = document.getElementById('seatPickerPrev');
         const seatPickerNext = document.getElementById('seatPickerNext');
@@ -1116,6 +1120,36 @@
             }).join('');
         }
 
+        function renderSeatMiniMap(activeTypeName) {
+            if (!seatMiniMap) {
+                return;
+            }
+
+            const active = getSeatZoneMeta(activeTypeName);
+            const zones = [
+                { key: 'platino', label: 'Platino', hint: 'Mas cerca' },
+                { key: 'vip', label: 'VIP', hint: 'Intermedio' },
+                { key: 'numerado', label: 'Numerado', hint: 'Mas lejos' },
+            ];
+
+            const zoneBlocks = zones.map((zone) => {
+                const classes = ['mini-zone', `mini-zone-${zone.key}`, active.key === zone.key ? 'is-active' : ''].filter(Boolean).join(' ');
+                return `
+                    <div class="${classes}">
+                        <strong>${zone.label}</strong>
+                        <span>${zone.hint}</span>
+                    </div>
+                `;
+            }).join('');
+
+            seatMiniMap.innerHTML = `
+                <h4>Croquis rapido</h4>
+                <div class="mini-stage">Escenario</div>
+                <div class="mini-zones">${zoneBlocks}</div>
+                <p class="mini-note">Referencia visual de ubicacion de zonas.</p>
+            `;
+        }
+
         function getSeatWizardCurrentItem() {
             return state.seatWizard.items[state.seatWizard.index] || null;
         }
@@ -1224,6 +1258,7 @@
             const zone = getSeatZoneMeta(item.typeName);
             seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${zone.label} · Elige ${item.quantity} asiento(s) de ${totalSeats} asientos`;
             renderSeatTypeBands(item.typeName);
+            renderSeatMiniMap(item.typeName);
             seatPickerPrev.disabled = state.seatWizard.index === 0;
             seatPickerNext.textContent = state.seatWizard.index === state.seatWizard.items.length - 1
                 ? 'Confirmar compra'
@@ -1396,6 +1431,11 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
                 const data = await apiCall('POST', '/auth/login', { email, password });
                 localStorage.setItem('tm_token', data.token);
@@ -1424,8 +1464,29 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
             try {
-                await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+                const data = await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+
+                if (data?.token && data?.user) {
+                    localStorage.setItem('tm_token', data.token);
+                    state.token = data.token;
+                    state.user = data.user;
+                    localStorage.setItem('tm_user', JSON.stringify(data.user));
+                    if (typeof window.closeRegisterModal === 'function') {
+                        window.closeRegisterModal();
+                    }
+                    loadCartFromStorage();
+                    setTopbarUi();
+                    notify(`Bienvenido ${data.user.name}`, 'ok');
+                    renderAccess();
+                    return;
+                }
+
                 notify('Cuenta creada. Inicia sesion para continuar', 'ok');
                 if (typeof window.closeRegisterModal === 'function' && typeof window.openLoginModal === 'function') {
                     window.closeRegisterModal();
