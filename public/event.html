@@ -83,7 +83,7 @@
                 <section id="ticketCheckoutSection" class="panel ticket-checkout hidden">
                     <div class="section-title-row">
                         <div>
-                            <h2>Conseguir boletos</h2>
+                            <h2>Comprar</h2>
                             <p class="ticket-summary">Selecciona el tipo, cantidad y agrega al carrito.</p>
                         </div>
                     </div>
@@ -132,7 +132,7 @@
                 </div>
 
                 <div class="event-bottom-cta hidden" id="eventBottomCtaWrap">
-                    <button id="goToCheckout" class="get-tickets-btn hidden" type="button">Conseguir boletos</button>
+                    <button id="goToCheckout" class="get-tickets-btn hidden" type="button">Comprar</button>
                 </div>
 
                 <input id="imagePicker" class="hidden" type="file" accept="image/*">
@@ -306,6 +306,73 @@
         function getCartStorageKeyByUserId(userId) {
             const owner = userId ? `user_${userId}` : 'guest';
             return `tm_cart_v1_${owner}_event_${state.eventId || 'unknown'}`;
+        }
+
+        function normalizeEventCart(rawCart) {
+            if (!Array.isArray(rawCart)) {
+                return [];
+            }
+
+            return rawCart
+                .map((item) => ({
+                    ticketTypeId: item?.ticketTypeId,
+                    typeName: String(item?.typeName || 'Boleto'),
+                    unitPrice: Number(item?.unitPrice || 0),
+                    quantity: Number(item?.quantity || 1),
+                    maxAvailable: Number(item?.maxAvailable || 1),
+                }))
+                .filter((item) => item.ticketTypeId)
+                .map((item) => ({
+                    ...item,
+                    quantity: Number.isInteger(item.quantity) && item.quantity > 0 ? item.quantity : 1,
+                    maxAvailable: Number.isInteger(item.maxAvailable) && item.maxAvailable > 0 ? item.maxAvailable : 1,
+                }));
+        }
+
+        function saveEventCartToStorage() {
+            const key = getCartStorageKeyByUserId(state.user?.id || null);
+            if (!isRegularUser() || !state.cart.length) {
+                localStorage.removeItem(key);
+                updateTopCartUi();
+                return;
+            }
+
+            const payload = state.cart.map((item) => ({
+                eventId: String(state.eventId || ''),
+                eventName: state.event?.name || '',
+                ticketTypeId: item.ticketTypeId,
+                typeName: item.typeName,
+                unitPrice: Number(item.unitPrice || 0),
+                quantity: Number(item.quantity || 1),
+                maxAvailable: Number(item.maxAvailable || 1),
+            }));
+
+            localStorage.setItem(key, JSON.stringify(payload));
+            updateTopCartUi();
+        }
+
+        function loadEventCartFromStorage() {
+            if (!isRegularUser()) {
+                state.cart = [];
+                updateTopCartUi();
+                return;
+            }
+
+            const key = getCartStorageKeyByUserId(state.user?.id || null);
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) {
+                    state.cart = [];
+                    updateTopCartUi();
+                    return;
+                }
+
+                state.cart = normalizeEventCart(JSON.parse(raw));
+            } catch (err) {
+                state.cart = [];
+            }
+
+            updateTopCartUi();
         }
 
         function getCartSummary(onlyCurrentEvent = false) {
@@ -679,8 +746,8 @@
             openTicketCreatorInline.classList.toggle('hidden', !editable);
             eventBottomCtaWrap.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0 || adminView);
             goToCheckout.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0 || adminView);
-            ticketCheckoutSection.classList.toggle('hidden', !checkoutViewer || !state.checkoutOpen || visibleRows.length === 0 || adminView);
-            eventCartPanel.classList.toggle('hidden', !canBuy || !state.checkoutOpen);
+            ticketCheckoutSection.classList.add('hidden');
+            eventCartPanel.classList.add('hidden');
             if (editable) {
                 fillEditForm(event);
             }
@@ -825,7 +892,8 @@
             }
 
             notify('Boleto agregado al carrito', 'ok');
-            state.checkoutOpen = true;
+            state.checkoutOpen = false;
+            saveEventCartToStorage();
             renderEventCart();
             renderEvent();
         }
@@ -835,6 +903,7 @@
             if (!state.cart.length) {
                 state.checkoutOpen = false;
             }
+            saveEventCartToStorage();
             renderEventCart();
             renderEvent();
         }
@@ -852,6 +921,7 @@
                 item.quantity = Math.min(qty, Number(item.maxAvailable || qty));
             }
 
+            saveEventCartToStorage();
             renderEventCart();
             renderEvent();
         }
@@ -1200,6 +1270,8 @@
                 state.cart = [];
             }
 
+            loadEventCartFromStorage();
+
             state.checkoutOpen = false;
             setTopbarUi();
         }
@@ -1258,6 +1330,7 @@
                 return;
             }
 
+            saveEventCartToStorage();
             window.location.href = `/purchase.html?id=${encodeURIComponent(state.eventId)}`;
         });
         const doLoginButton = document.getElementById('doLogin');
@@ -1272,6 +1345,7 @@
         document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);
         document.getElementById('clearEventCart').addEventListener('click', () => {
             state.cart = [];
+            saveEventCartToStorage();
             renderEventCart();
             renderEvent();
         });

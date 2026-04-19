@@ -28,7 +28,7 @@
 
     <main class="purchase-main">
         <button id="purchaseCloseToHome" class="purchase-close-home" type="button" aria-label="Volver al inicio">X</button>
-        <section class="panel purchase-hero">
+        <section class="panel purchase-hero hidden">
             <h1 id="purchaseEventName" class="title">Cargando evento...</h1>
             <p id="purchaseEventMeta" class="meta"></p>
             <p id="purchaseEventDescription" class="meta"></p>
@@ -971,10 +971,8 @@
                 openAuthModal();
             }
             buyerOnlyMessage.classList.toggle('hidden', !hasSession || buyer);
-            checkoutPanel.classList.toggle('hidden', !buyer);
+            checkoutPanel.classList.add('hidden');
             cartPanel.classList.remove('hidden');
-
-            renderCheckoutRows();
             renderCart();
         }
 
