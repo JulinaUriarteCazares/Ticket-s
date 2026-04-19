@@ -395,7 +395,7 @@ router.get('/', async (req, res) => {
     const result = await pool.query(query);
     const rows = requestUser && (requestUser.role === 'admin' || requestUser.role === 'organizer')
       ? result.rows
-      : result.rows.filter((event) => (!supportsActive || isEventActive(event)) && !isPastEvent(event));
+      : result.rows.filter((event) => isPastEvent(event) || !supportsActive || isEventActive(event));
 
     res.json(rows);
   } catch (err) {

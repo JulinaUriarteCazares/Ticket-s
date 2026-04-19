@@ -69,6 +69,383 @@ function isPastEvent(event) {
   return eventDateTime.getTime() < Date.now();
 }
 
+async function buildTicketPdfBuffer(ticket) {
+  const qrSvg = await QRCode.toString(ticket.qr_code, {
+  type: 'svg',
+  margin: 1,
+  width: 180,
+  errorCorrectionLevel: 'M'
+  });
+
+  const eventDate = ticket.event_date
+  ? new Date(ticket.event_date).toLocaleDateString('es-MX')
+  : 'Fecha por confirmar';
+  const eventTime = ticket.event_time ? ` ${ticket.event_time}` : '';
+  const dateTimeLocation = `${eventDate}${eventTime} | ${ticket.location || 'Ubicacion por confirmar'}`;
+  const eventImage = ticket.image_url || 'https://placehold.co/520x760?text=Evento';
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(ticket.name || 'Boleto')}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: 1200px;
+    }
+    .generated-ticket {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 250px;
+      background: #fff;
+      border: 3px solid #7a2df0;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(22, 26, 35, 0.14);
+    }
+    .generated-ticket-poster {
+      background: #101318;
+      overflow: hidden;
+    }
+    .generated-ticket-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .generated-ticket-content {
+      padding: 28px 26px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .generated-ticket-kicker {
+      margin: 0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: #7a2df0;
+      font-weight: 700;
+    }
+    .generated-ticket-content h3 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.03;
+      color: #101318;
+    }
+    .generated-ticket-subtitle {
+      margin: 0;
+      color: #5b6270;
+      font-size: 15px;
+    }
+    .generated-ticket-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .generated-ticket-meta div {
+      border: 1px solid #ded7ea;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #fbfaff;
+    }
+    .generated-ticket-meta span {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7d8594;
+      margin-bottom: 4px;
+    }
+    .generated-ticket-meta strong {
+      font-size: 16px;
+      color: #101318;
+    }
+    .generated-ticket-qr {
+      padding: 22px;
+      background: #faf9ff;
+      border-left: 1px solid #ebe5f7;
+      display: grid;
+      gap: 12px;
+      align-content: end;
+    }
+    .generated-ticket-qr-box {
+      background: #fff;
+      border: 1px solid #e3def0;
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .generated-ticket-qr-box svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .generated-ticket-qr p {
+      margin: 0;
+      text-align: center;
+      color: #596173;
+      font-size: 14px;
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .ticket-container { max-width: 100%; }
+      .generated-ticket { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ticket-container">
+    <article class="generated-ticket">
+      <div class="generated-ticket-poster">
+        <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(ticket.name || 'Evento')}" class="generated-ticket-image">
+      </div>
+      <div class="generated-ticket-content">
+        <p class="generated-ticket-kicker">Ticketmaster</p>
+        <h3>${escapeHtml(ticket.name || 'Evento')}</h3>
+        <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
+        <div class="generated-ticket-meta">
+          <div><span>Tipo</span><strong>${escapeHtml(ticket.type_name)}</strong></div>
+          <div><span>Asiento</span><strong>${escapeHtml(ticket.seat_number)}</strong></div>
+          <div><span>Precio</span><strong>$${Number(ticket.price).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+          <div><span>Estado</span><strong>${ticket.status ? 'Confirmado' : 'Usado'}</strong></div>
+        </div>
+      </div>
+      <div class="generated-ticket-qr">
+        <div class="generated-ticket-qr-box">${qrSvg}</div>
+        <p>Escanea para validar</p>
+      </div>
+    </article>
+  </div>
+</body>
+</html>`;
+
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const page = await browser.newPage();
+
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const pdfBuffer = await page.pdf({
+  format: 'A4',
+  landscape: true,
+  margin: { top: 20, right: 20, bottom: 20, left: 20 },
+  printBackground: true
+  });
+
+  await browser.close();
+  return pdfBuffer;
+}
+
+function buildTicketFileName(ticket, fallbackIndex = 1) {
+  const eventSlug = String(ticket.name || 'evento').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const seat = ticket.seat_number || String(fallbackIndex);
+  return `boleto-${eventSlug}-${seat}.pdf`;
+}
+
+async function buildBulkTicketsPdfBuffer(tickets) {
+  const pages = await Promise.all(tickets.map(async (ticket) => {
+    const qrSvg = await QRCode.toString(ticket.qr_code, {
+      type: 'svg',
+      margin: 1,
+      width: 180,
+      errorCorrectionLevel: 'M'
+    });
+
+    const eventDate = ticket.event_date
+      ? new Date(ticket.event_date).toLocaleDateString('es-MX')
+      : 'Fecha por confirmar';
+    const eventTime = ticket.event_time ? ` ${ticket.event_time}` : '';
+    const dateTimeLocation = `${eventDate}${eventTime} | ${ticket.location || 'Ubicacion por confirmar'}`;
+    const eventImage = ticket.image_url || 'https://placehold.co/520x760?text=Evento';
+
+    return `
+      <section class="ticket-page">
+        <div class="ticket-container">
+          <article class="generated-ticket">
+            <div class="generated-ticket-poster">
+              <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(ticket.name || 'Evento')}" class="generated-ticket-image">
+            </div>
+            <div class="generated-ticket-content">
+              <p class="generated-ticket-kicker">Ticketmaster</p>
+              <h3>${escapeHtml(ticket.name || 'Evento')}</h3>
+              <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
+              <div class="generated-ticket-meta">
+                <div><span>Tipo</span><strong>${escapeHtml(ticket.type_name)}</strong></div>
+                <div><span>Asiento</span><strong>${escapeHtml(ticket.seat_number)}</strong></div>
+                <div><span>Precio</span><strong>$${Number(ticket.price).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+                <div><span>Estado</span><strong>${ticket.status ? 'Confirmado' : 'Usado'}</strong></div>
+              </div>
+            </div>
+            <div class="generated-ticket-qr">
+              <div class="generated-ticket-qr-box">${qrSvg}</div>
+              <p>Escanea para validar</p>
+            </div>
+          </article>
+        </div>
+      </section>`;
+  }));
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boletos</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+    }
+    .ticket-page {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      page-break-after: always;
+      break-after: page;
+    }
+    .ticket-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .ticket-container {
+      width: 100%;
+      max-width: 1200px;
+    }
+    .generated-ticket {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 250px;
+      background: #fff;
+      border: 3px solid #7a2df0;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(22, 26, 35, 0.14);
+    }
+    .generated-ticket-poster {
+      background: #101318;
+      overflow: hidden;
+    }
+    .generated-ticket-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .generated-ticket-content {
+      padding: 28px 26px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .generated-ticket-kicker {
+      margin: 0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: #7a2df0;
+      font-weight: 700;
+    }
+    .generated-ticket-content h3 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.03;
+      color: #101318;
+    }
+    .generated-ticket-subtitle {
+      margin: 0;
+      color: #5b6270;
+      font-size: 15px;
+    }
+    .generated-ticket-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .generated-ticket-meta div {
+      border: 1px solid #ded7ea;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #fbfaff;
+    }
+    .generated-ticket-meta span {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7d8594;
+      margin-bottom: 4px;
+    }
+    .generated-ticket-meta strong {
+      font-size: 16px;
+      color: #101318;
+    }
+    .generated-ticket-qr {
+      padding: 22px;
+      background: #faf9ff;
+      border-left: 1px solid #ebe5f7;
+      display: grid;
+      gap: 12px;
+      align-content: end;
+    }
+    .generated-ticket-qr-box {
+      background: #fff;
+      border: 1px solid #e3def0;
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .generated-ticket-qr-box svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .generated-ticket-qr p {
+      margin: 0;
+      text-align: center;
+      color: #596173;
+      font-size: 14px;
+    }
+    @media print {
+      body { background: #fff; }
+      .ticket-page { padding: 0; }
+      .generated-ticket { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  ${pages.join('\n')}
+</body>
+</html>`;
+
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const page = await browser.newPage();
+
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const pdfBuffer = await page.pdf({
+    format: 'A4',
+    landscape: true,
+    margin: { top: 20, right: 20, bottom: 20, left: 20 },
+    printBackground: true
+  });
+
+  await browser.close();
+  return pdfBuffer;
+}
+
 // Comprar ticket (con asiento)
 router.post('/purchase', auth, async (req, res) => {
   const { ticket_type_id, quantity = 1 } = req.body;
@@ -224,191 +601,63 @@ router.get('/:ticketId/pdf', auth, async (req, res) => {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
-    // Generate QR as data URL
-    const qrSvg = await QRCode.toString(ticket.qr_code, {
-      type: 'svg',
-      margin: 1,
-      width: 180,
-      errorCorrectionLevel: 'M'
-    });
-
-    // Format date
-    const eventDate = ticket.event_date
-      ? new Date(ticket.event_date).toLocaleDateString('es-MX')
-      : 'Fecha por confirmar';
-    const eventTime = ticket.event_time ? ` ${ticket.event_time}` : '';
-    const dateTimeLocation = `${eventDate}${eventTime} | ${ticket.location || 'Ubicacion por confirmar'}`;
-
-    // Generate HTML that matches the page exactly
-    const eventImage = ticket.image_url || 'https://placehold.co/520x760?text=Evento';
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml(ticket.name || 'Boleto')}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; 
-            background: #f5f5f5;
-            display: grid;
-            place-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .ticket-container {
-            width: 100%;
-            max-width: 1200px;
-        }
-        .generated-ticket {
-            display: grid;
-            grid-template-columns: 260px minmax(0, 1fr) 250px;
-            background: #fff;
-            border: 3px solid #7a2df0;
-            border-radius: 18px;
-            overflow: hidden;
-            box-shadow: 0 18px 40px rgba(22, 26, 35, 0.14);
-        }
-        .generated-ticket-poster {
-            background: #101318;
-            overflow: hidden;
-        }
-        .generated-ticket-image {
-            width: 100%;
-            height: 100%;
-            display: block;
-            object-fit: cover;
-        }
-        .generated-ticket-content {
-            padding: 28px 26px;
-            display: grid;
-            gap: 14px;
-            align-content: start;
-        }
-        .generated-ticket-kicker {
-            margin: 0;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            font-size: 12px;
-            color: #7a2df0;
-            font-weight: 700;
-        }
-        .generated-ticket-content h3 {
-            margin: 0;
-            font-size: 48px;
-            line-height: 1.03;
-            color: #101318;
-        }
-        .generated-ticket-subtitle {
-            margin: 0;
-            color: #5b6270;
-            font-size: 15px;
-        }
-        .generated-ticket-meta {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .generated-ticket-meta div {
-            border: 1px solid #ded7ea;
-            border-radius: 12px;
-            padding: 12px 14px;
-            background: #fbfaff;
-        }
-        .generated-ticket-meta span {
-            display: block;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #7d8594;
-            margin-bottom: 4px;
-        }
-        .generated-ticket-meta strong {
-            font-size: 16px;
-            color: #101318;
-        }
-        .generated-ticket-qr {
-            padding: 22px;
-            background: #faf9ff;
-            border-left: 1px solid #ebe5f7;
-            display: grid;
-            gap: 12px;
-            align-content: end;
-        }
-        .generated-ticket-qr-box {
-            background: #fff;
-            border: 1px solid #e3def0;
-            border-radius: 16px;
-            padding: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .generated-ticket-qr-box svg {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        .generated-ticket-qr p {
-            margin: 0;
-            text-align: center;
-            color: #596173;
-            font-size: 14px;
-        }
-        @media print {
-            body { background: #fff; padding: 0; }
-            .ticket-container { max-width: 100%; }
-            .generated-ticket { box-shadow: none; }
-        }
-    </style>
-</head>
-<body>
-    <div class="ticket-container">
-        <article class="generated-ticket">
-            <div class="generated-ticket-poster">
-                <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(ticket.name || 'Evento')}" class="generated-ticket-image">
-            </div>
-            <div class="generated-ticket-content">
-                <p class="generated-ticket-kicker">Ticketmaster</p>
-                <h3>${escapeHtml(ticket.name || 'Evento')}</h3>
-                <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
-                <div class="generated-ticket-meta">
-                    <div><span>Tipo</span><strong>${escapeHtml(ticket.type_name)}</strong></div>
-                    <div><span>Asiento</span><strong>${escapeHtml(ticket.seat_number)}</strong></div>
-                    <div><span>Precio</span><strong>$${Number(ticket.price).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
-                    <div><span>Estado</span><strong>${ticket.status ? 'Confirmado' : 'Usado'}</strong></div>
-                </div>
-            </div>
-            <div class="generated-ticket-qr">
-                <div class="generated-ticket-qr-box">${qrSvg}</div>
-                <p>Escanea para validar</p>
-            </div>
-        </article>
-    </div>
-</body>
-</html>`;
-
-    // Use Puppeteer to generate PDF
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    const page = await browser.newPage();
-    
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      landscape: true,
-      margin: { top: 20, right: 20, bottom: 20, left: 20 },
-      printBackground: true
-    });
-    
-    await browser.close();
-
-    const fileName = `boleto-${String(ticket.name || 'evento').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ticket.seat_number}.pdf`;
+    const pdfBuffer = await buildTicketPdfBuffer(ticket);
+    const fileName = buildTicketFileName(ticket);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(pdfBuffer);
   } catch (err) {
     console.error('PDF Generation Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bulk-pdf', auth, async (req, res) => {
+  const { ticket_ids: ticketIds } = req.body;
+
+  if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+    return res.status(400).json({ error: 'ticket_ids debe ser un arreglo con al menos un elemento' });
+  }
+
+  const normalizedIds = [...new Set(ticketIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!normalizedIds.length) {
+    return res.status(400).json({ error: 'ticket_ids invalidos' });
+  }
+
+  try {
+    const placeholders = normalizedIds.map((_, index) => `$${index + 1}`).join(', ');
+    const result = await pool.query(
+      `SELECT t.id, t.qr_code, t.seat_number, t.user_id, t.status, t.purchase_date,
+              tt.id AS ticket_type_id, tt.type_name, tt.price,
+              e.id AS event_id, e.name, e.event_date, e.event_time, e.location, e.image_url, e.description
+       FROM tickets t
+       JOIN ticket_types tt ON t.ticket_type_id = tt.id
+       JOIN events e ON tt.event_id = e.id
+       WHERE t.id IN (${placeholders})`,
+      normalizedIds
+    );
+
+    const byId = new Map(result.rows.map((row) => [String(row.id), row]));
+    const tickets = normalizedIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+    if (!tickets.length) {
+      return res.status(404).json({ error: 'No se encontraron boletos para descargar' });
+    }
+
+    if (req.user.role !== 'admin') {
+      const unauthorized = tickets.find((ticket) => String(ticket.user_id) !== String(req.user.id));
+      if (unauthorized) {
+        return res.status(403).json({ error: 'No autorizado para descargar uno o mas boletos' });
+      }
+    }
+
+    const pdfBuffer = await buildBulkTicketsPdfBuffer(tickets);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="boletos-${stamp}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Bulk PDF Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

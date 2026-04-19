@@ -34,7 +34,10 @@
         <section>
             <div class="section-head">
                 <h2>Eventos disponibles</h2>
-                <button id="refreshEvents" class="refresh-btn" type="button">Actualizar eventos</button>
+                <div class="section-head-actions">
+                    <button id="createEventButton" class="refresh-btn secondary-btn" type="button">Crear evento</button>
+                    <button id="refreshEvents" class="refresh-btn" type="button">Actualizar eventos</button>
+                </div>
             </div>
             <div id="eventsRoot" class="events-grid"></div>
         </section>
@@ -101,6 +104,65 @@
         </div>
     </div>
 
+    <div id="createEventModal" class="auth-modal" aria-hidden="true">
+        <div class="auth-panel create-event-panel" role="dialog" aria-modal="true" aria-label="Crear evento">
+            <div class="register-head">
+                <h3>Crear evento</h3>
+                <button id="closeCreateEventIcon" class="icon-close" type="button" aria-label="Cerrar formulario">X</button>
+            </div>
+            <p class="event-form-helper">Completa todos los datos del evento antes de guardarlo.</p>
+            <div class="auth-grid event-form-grid">
+                <div class="modal-field full">
+                    <label class="field-label" for="eventName">Nombre del evento</label>
+                    <input id="eventName" type="text" placeholder="Ej. Rock en el Zocalo #389" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="modal-field full">
+                    <label class="field-label" for="eventLocation">Ubicacion</label>
+                    <input id="eventLocation" type="text" placeholder="Ej. Puebla - Centro Expositor" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="eventDate">Fecha</label>
+                    <input id="eventDate" type="date">
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="eventTime">Hora</label>
+                    <input id="eventTime" type="time">
+                </div>
+                <div class="modal-field full">
+                    <label class="field-label" for="eventDescription">Descripcion</label>
+                    <textarea id="eventDescription" rows="4" placeholder="Describe el evento"></textarea>
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="eventCapacity">Capacidad total</label>
+                    <input id="eventCapacity" type="number" min="1" step="1" placeholder="1000">
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="artistName">Nombre del artista</label>
+                    <input id="artistName" type="text" placeholder="Ej. Banda invitada" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="artistFee">Tarifa del artista</label>
+                    <input id="artistFee" type="number" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="modal-field full">
+                    <label class="field-label">Imagen del evento</label>
+                    <div id="eventImageDropzone" class="image-dropzone" tabindex="0" role="button" aria-label="Subir imagen del evento">
+                        <img id="eventImagePreview" class="image-dropzone-preview hidden" alt="Vista previa de la imagen del evento">
+                        <div id="eventImageEmpty" class="image-dropzone-empty">
+                            <strong>Arrastra una imagen aqui</strong>
+                            <span>o haz clic para elegir un archivo</span>
+                        </div>
+                    </div>
+                    <input id="eventImageInput" class="hidden" type="file" accept="image/*">
+                    <p id="eventImageHint" class="event-form-helper event-form-helper-small">Se guardara la imagen como parte del evento.</p>
+                </div>
+            </div>
+            <div class="auth-actions">
+                <button id="saveEventButton" class="action-primary login-submit" type="button">Crear evento</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toastRoot" class="toasts" aria-live="polite" aria-atomic="true"></div>
 
     <script>
@@ -125,8 +187,16 @@
         const adminInsightsSection = document.getElementById('adminInsightsSection');
         const adminStatementRoot = document.getElementById('adminStatementRoot');
         const adminInsightsRoot = document.getElementById('adminInsightsRoot');
+        const createEventModal = document.getElementById('createEventModal');
+        const createEventButton = document.getElementById('createEventButton');
+        const saveEventButton = document.getElementById('saveEventButton');
+        const eventImageDropzone = document.getElementById('eventImageDropzone');
+        const eventImageInput = document.getElementById('eventImageInput');
+        const eventImagePreview = document.getElementById('eventImagePreview');
+        const eventImageEmpty = document.getElementById('eventImageEmpty');
         const regRoleWrap = document.getElementById('regRoleWrap');
         const regRoleHint = document.getElementById('regRoleHint');
+        let createEventImageDataUrl = null;
 
         function isOrganizerOrAdmin() {
             return state.user && (state.user.role === 'organizer' || state.user.role === 'admin');
@@ -299,6 +369,18 @@
             registerModal.setAttribute('aria-hidden', 'true');
         }
 
+        function openCreateEventModal() {
+            clearCreateEventForm();
+            createEventModal.classList.add('open');
+            createEventModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeCreateEventModal() {
+            clearCreateEventForm();
+            createEventModal.classList.remove('open');
+            createEventModal.setAttribute('aria-hidden', 'true');
+        }
+
         function clearLoginForm() {
             document.getElementById('loginEmail').value = '';
             document.getElementById('loginPassword').value = '';
@@ -309,6 +391,50 @@
             document.getElementById('regEmail').value = '';
             document.getElementById('regPassword').value = '';
             document.getElementById('regRole').value = 'user';
+        }
+
+        function clearCreateEventForm() {
+            document.getElementById('eventName').value = '';
+            document.getElementById('eventLocation').value = '';
+            document.getElementById('eventDate').value = '';
+            document.getElementById('eventTime').value = '';
+            document.getElementById('eventDescription').value = '';
+            document.getElementById('eventCapacity').value = '';
+            document.getElementById('artistName').value = '';
+            document.getElementById('artistFee').value = '';
+            createEventImageDataUrl = null;
+            eventImageInput.value = '';
+            eventImagePreview.src = '';
+            eventImagePreview.classList.add('hidden');
+            eventImageEmpty.classList.remove('hidden');
+        }
+
+        function setCreateEventImagePreview(file) {
+            if (!file) {
+                createEventImageDataUrl = null;
+                eventImageInput.value = '';
+                eventImagePreview.src = '';
+                eventImagePreview.classList.add('hidden');
+                eventImageEmpty.classList.remove('hidden');
+                return;
+            }
+
+            if (!file.type || !file.type.startsWith('image/')) {
+                notify('Selecciona una imagen valida', 'err');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                createEventImageDataUrl = String(reader.result || '');
+                eventImagePreview.src = createEventImageDataUrl;
+                eventImagePreview.classList.remove('hidden');
+                eventImageEmpty.classList.add('hidden');
+            };
+            reader.onerror = () => {
+                notify('No se pudo leer la imagen', 'err');
+            };
+            reader.readAsDataURL(file);
         }
 
         function formatEventDate(dateText, timeText) {
@@ -329,6 +455,53 @@
                 await apiCall('PATCH', `/events/${eventId}/active`, { active: nextState });
                 notify(nextState ? 'Evento activado' : 'Evento desactivado', 'ok');
                 await loadEvents();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function createEventHandler() {
+            const name = document.getElementById('eventName').value.trim();
+            const location = document.getElementById('eventLocation').value.trim();
+            const event_date = document.getElementById('eventDate').value;
+            const event_time = document.getElementById('eventTime').value;
+            const description = document.getElementById('eventDescription').value.trim();
+            const capacity = Number(document.getElementById('eventCapacity').value);
+            const artist_name = document.getElementById('artistName').value.trim();
+            const artist_fee = Number(document.getElementById('artistFee').value);
+            const image_url = createEventImageDataUrl;
+
+            if (!name || !location || !event_date || !event_time || !description) {
+                notify('Completa los campos obligatorios del evento', 'err');
+                return;
+            }
+
+            if (!Number.isFinite(capacity) || capacity < 1) {
+                notify('La capacidad debe ser un numero valido mayor a cero', 'err');
+                return;
+            }
+
+            if (!Number.isFinite(artist_fee) || artist_fee < 0) {
+                notify('La tarifa del artista debe ser un numero valido', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/events', {
+                    name,
+                    location,
+                    event_date,
+                    event_time,
+                    description,
+                    capacity,
+                    artist_name: artist_name || null,
+                    artist_fee,
+                    image_url: image_url || null,
+                });
+                notify('Evento creado correctamente', 'ok');
+                closeCreateEventModal();
+                await loadEvents();
+                await loadAdminInsights();
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -388,7 +561,7 @@
                             <h3>${event.name || 'Evento'}</h3>
                             <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
                         </div>
-                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                         <div class="admin-metric-grid">
                             <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(event.tickets_sold || 0)}</strong></div>
                             <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(event.tickets_unsold || 0)}</strong></div>
@@ -451,7 +624,7 @@
                 card.innerHTML = `
                     ${imageHtml}
                     <h3>${event.name}</h3>
-                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                     ${managerControls}
                 `;
 
@@ -565,16 +738,16 @@
             state.token = null;
             state.user = null;
             state.adminInsights = [];
-            setAuthUi();
-            await loadEvents();
-            notify('Sesion cerrada', 'info');
+            window.location.replace('/');
         }
 
         loginButton.addEventListener('click', openLoginModal);
         registerButton.addEventListener('click', openRegisterModal);
+        createEventButton.addEventListener('click', openCreateEventModal);
         logoutTopButton.addEventListener('click', logoutHandler);
         document.getElementById('closeLoginIcon').addEventListener('click', closeLoginModal);
         document.getElementById('closeRegisterIcon').addEventListener('click', closeRegisterModal);
+        document.getElementById('closeCreateEventIcon').addEventListener('click', closeCreateEventModal);
         document.getElementById('openRegisterFromLogin').addEventListener('click', () => {
             closeLoginModal();
             openRegisterModal();
@@ -585,6 +758,35 @@
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
+        saveEventButton.addEventListener('click', createEventHandler);
+        eventImageDropzone.addEventListener('click', () => eventImageInput.click());
+        eventImageDropzone.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                eventImageInput.click();
+            }
+        });
+        eventImageInput.addEventListener('change', () => {
+            setCreateEventImagePreview(eventImageInput.files?.[0] || null);
+        });
+        eventImageDropzone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            eventImageDropzone.classList.add('is-dragover');
+        });
+        eventImageDropzone.addEventListener('dragleave', () => {
+            eventImageDropzone.classList.remove('is-dragover');
+        });
+        eventImageDropzone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            eventImageDropzone.classList.remove('is-dragover');
+            const file = event.dataTransfer?.files?.[0] || null;
+            if (file) {
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                eventImageInput.files = dataTransfer.files;
+                setCreateEventImagePreview(file);
+            }
+        });
         document.getElementById('refreshEvents').addEventListener('click', async () => {
             await loadEvents();
             await loadAdminInsights();
@@ -599,6 +801,12 @@
         registerModal.addEventListener('click', (event) => {
             if (event.target === registerModal) {
                 closeRegisterModal();
+            }
+        });
+
+        createEventModal.addEventListener('click', (event) => {
+            if (event.target === createEventModal) {
+                closeCreateEventModal();
             }
         });
 

@@ -33,8 +33,11 @@
 
         <section>
             <div class="section-head">
-                <h2>Eventos disponibles</h2>
-                <button id="refreshEvents" class="refresh-btn" type="button">Actualizar eventos</button>
+                <h2 id="eventsSectionTitle">Eventos disponibles</h2>
+                <div class="section-head-actions">
+                    <button id="togglePastEvents" class="refresh-btn secondary-btn" type="button">Ver finalizados</button>
+                    <button id="refreshEvents" class="refresh-btn" type="button">Actualizar eventos</button>
+                </div>
             </div>
             <div id="eventsRoot" class="events-grid"></div>
         </section>
@@ -108,6 +111,7 @@
             token: localStorage.getItem('tm_token') || null,
             user: null,
             events: [],
+            showPastOnly: false,
             adminSummary: { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 },
             adminInsights: []
         };
@@ -125,6 +129,8 @@
         const adminInsightsSection = document.getElementById('adminInsightsSection');
         const adminStatementRoot = document.getElementById('adminStatementRoot');
         const adminInsightsRoot = document.getElementById('adminInsightsRoot');
+        const togglePastEventsButton = document.getElementById('togglePastEvents');
+        const eventsSectionTitle = document.getElementById('eventsSectionTitle');
         const regRoleWrap = document.getElementById('regRoleWrap');
         const regRoleHint = document.getElementById('regRoleHint');
 
@@ -320,6 +326,31 @@
             return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
         }
 
+        function buildEventDateTime(event) {
+            if (!event?.event_date) {
+                return null;
+            }
+
+            const datePart = String(event.event_date).slice(0, 10);
+            const timePart = event.event_time ? String(event.event_time).slice(0, 8) : '23:59:59';
+            const candidate = new Date(`${datePart}T${timePart}`);
+
+            if (!Number.isNaN(candidate.getTime())) {
+                return candidate;
+            }
+
+            const fallback = new Date(event.event_date);
+            return Number.isNaN(fallback.getTime()) ? null : fallback;
+        }
+
+        function isPastEvent(event) {
+            const eventDateTime = buildEventDateTime(event);
+            if (!eventDateTime) {
+                return false;
+            }
+            return eventDateTime.getTime() < Date.now();
+        }
+
         function isEventActive(event) {
             return event && event.active !== false;
         }
@@ -388,7 +419,7 @@
                             <h3>${event.name || 'Evento'}</h3>
                             <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
                         </div>
-                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                         <div class="admin-metric-grid">
                             <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(event.tickets_sold || 0)}</strong></div>
                             <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(event.tickets_unsold || 0)}</strong></div>
@@ -424,27 +455,46 @@
         function renderEvents() {
             eventsRoot.innerHTML = '';
 
-            if (!state.events.length) {
+            const visibleEvents = state.showPastOnly
+                ? state.events.filter((event) => isPastEvent(event))
+                : state.events.filter((event) => isEventActive(event) && !isPastEvent(event));
+
+            if (eventsSectionTitle) {
+                eventsSectionTitle.textContent = state.showPastOnly ? 'Eventos finalizados' : 'Eventos disponibles';
+            }
+
+            if (togglePastEventsButton) {
+                togglePastEventsButton.textContent = state.showPastOnly ? 'Ver activos' : 'Ver finalizados';
+            }
+
+            if (!visibleEvents.length) {
                 const empty = document.createElement('div');
                 empty.className = 'empty';
-                empty.textContent = 'No hay eventos disponibles por ahora.';
+                empty.textContent = state.showPastOnly
+                    ? 'No hay eventos finalizados para mostrar.'
+                    : 'No hay eventos activos para mostrar.';
                 eventsRoot.appendChild(empty);
                 return;
             }
 
-            state.events.forEach((event) => {
+            visibleEvents.forEach((event) => {
                 const card = document.createElement('article');
                 card.className = 'event-card';
-                card.setAttribute('data-event-open', event.id);
+                const finalized = isPastEvent(event);
+                if (!finalized) {
+                    card.setAttribute('data-event-open', event.id);
+                } else {
+                    card.classList.add('is-finalized');
+                }
                 const active = isEventActive(event);
 
                 const imageHtml = event.image_url
-                    ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
-                    : '<div class="event-image-placeholder">Sin imagen</div>';
+                    ? `<img class="event-image ${finalized ? 'is-finalized' : ''}" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
+                    : `<div class="event-image-placeholder ${finalized ? 'is-finalized' : ''}">Sin imagen</div>`;
 
                 const managerControls = `
                     <div class="event-card-actions">
-                        <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
+                        <span class="event-status-badge ${finalized ? 'is-finished' : (active ? 'is-active' : 'is-inactive')}">${finalized ? 'Finalizado' : (active ? 'Activo' : 'Inactivo')}</span>
                     </div>
                 `;
 
@@ -452,7 +502,7 @@
                     ${imageHtml}
                     <div class="event-card-body">
                         <h3>${event.name}</h3>
-                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                         ${managerControls}
                     </div>
                 `;
@@ -585,6 +635,10 @@
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
+        document.getElementById('togglePastEvents').addEventListener('click', () => {
+            state.showPastOnly = !state.showPastOnly;
+            renderEvents();
+        });
         document.getElementById('refreshEvents').addEventListener('click', async () => {
             await loadEvents();
             await loadAdminInsights();

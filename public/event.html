@@ -37,6 +37,7 @@
                         <button id="quickEditEvent" class="quick-edit-btn hidden" type="button">Editar evento</button>
                     </div>
                     <p id="eventMeta" class="meta"></p>
+                    <p id="eventArtist" class="meta"></p>
                     <p id="eventDescription" class="meta"></p>
                     <button id="deactivateEventInline" class="image-btn hidden" type="button">Desactivar evento</button>
                 </div>
@@ -308,7 +309,7 @@
                 return false;
             }
 
-            return state.user.role === 'organizer' && String(state.user.id) === String(event.organizer_id);
+            return state.user.role === 'organizer';
         }
 
         function isRegularUser() {
@@ -418,6 +419,7 @@
             document.getElementById('eventImage').src = event.image_url || 'https://placehold.co/1000x550?text=Evento';
             document.getElementById('eventName').textContent = event.name || 'Evento';
             document.getElementById('eventMeta').textContent = `${formatDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
+            document.getElementById('eventArtist').textContent = `Artista: ${event.artist_name || 'Por confirmar'}`;
             document.getElementById('eventDescription').textContent = event.description || 'Sin descripcion';
             document.getElementById('topTitle').textContent = event.name || 'Detalle del evento';
 
@@ -447,7 +449,8 @@
             ticketCountPill.textContent = `${visibleRows.length} tipo${visibleRows.length === 1 ? '' : 's'}`;
             ticketEmptyState.classList.toggle('hidden', visibleRows.length !== 0);
             organizerEventStatus.textContent = `Estado: ${isEventActive(event) ? 'Activo' : 'Inactivo'}`;
-            deactivateEventInlineBtn.classList.toggle('hidden', !editable || !isEventActive(event));
+            deactivateEventInlineBtn.classList.toggle('hidden', !editable);
+            deactivateEventInlineBtn.textContent = isEventActive(event) ? 'Desactivar evento' : 'Reactivar evento';
             document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
             document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
             if (checkoutViewer) {
@@ -536,21 +539,34 @@
             }
         }
 
-        async function deactivateEventInline() {
+        async function toggleEventStateInline() {
             const event = state.event;
             if (!event || !canEditEvent(event)) {
                 notify('No autorizado para cambiar el estado del evento', 'err');
                 return;
             }
 
-            if (!isEventActive(event)) {
-                notify('El evento ya esta inactivo', 'info');
+            const nextActiveState = !isEventActive(event);
+            const actionLabel = nextActiveState ? 'reactivar' : 'desactivar';
+            const code = String(Math.floor(1000 + Math.random() * 9000));
+            const answer = window.prompt(
+                `Para ${actionLabel} ${event.name}, escribe el nombre exacto del evento o el codigo ${code}`
+            );
+
+            if (answer === null) {
+                return;
+            }
+
+            const normalizedAnswer = answer.trim().toLowerCase();
+            const normalizedName = String(event.name || '').trim().toLowerCase();
+            if (normalizedAnswer !== normalizedName && answer.trim() !== code) {
+                notify('La confirmacion no coincide. No se cambio el estado.', 'err');
                 return;
             }
 
             try {
-                await apiCall('PATCH', `/events/${state.eventId}/active`, { active: false });
-                notify('Evento desactivado', 'ok');
+                await apiCall('PATCH', `/events/${state.eventId}/active`, { active: nextActiveState });
+                notify(nextActiveState ? 'Evento reactivado' : 'Evento desactivado', 'ok');
                 await loadEvent();
             } catch (err) {
                 notify(err.message, 'err');
@@ -1037,7 +1053,7 @@
         imageQuickAction.addEventListener('click', () => imagePicker.click());
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
         document.getElementById('downloadAdminEventPdf').addEventListener('click', downloadAdminEventReportPdf);
-        deactivateEventInlineBtn.addEventListener('click', deactivateEventInline);
+        deactivateEventInlineBtn.addEventListener('click', toggleEventStateInline);
         imagePicker.addEventListener('change', handleImageSelection);
         goToCheckout.addEventListener('click', () => {
             if (!state.token || !state.user) {

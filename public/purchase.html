@@ -68,16 +68,19 @@
             <div class="purchase-success-card">
                 <h2>Tu compra fue exitosa</h2>
                 <p id="purchaseSuccessDetail">Gracias por tu compra.</p>
-                <div id="purchaseSuccessSummary" class="purchase-success-summary"></div>
                 <div id="purchaseTicketsWrap" class="purchase-tickets-wrap hidden">
                     <div class="section-title-row purchase-ticket-head">
                         <div>
                             <h2>Boletos generados</h2>
-                            <p class="ticket-summary">Descarga o imprime cada boleto con su QR.</p>
+                            <p class="ticket-summary">Descarga tus boletos con su QR.</p>
+                        </div>
+                        <div class="section-title-actions">
+                            <button id="downloadAllTickets" class="image-btn" type="button">Descargar todos</button>
                         </div>
                     </div>
                     <div id="purchaseTicketsGrid" class="purchase-tickets-grid"></div>
                 </div>
+                <div id="purchaseSuccessSummary" class="purchase-success-summary"></div>
                 <button id="closePurchaseSuccess" type="button">Continuar</button>
             </div>
         </section>
@@ -107,6 +110,7 @@
         const purchaseSuccessSummary = document.getElementById('purchaseSuccessSummary');
         const purchaseTicketsWrap = document.getElementById('purchaseTicketsWrap');
         const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
+        const downloadAllTicketsButton = document.getElementById('downloadAllTickets');
         let lastPurchasedTickets = [];
 
         function openAuthModal() {
@@ -150,6 +154,7 @@
             purchaseTicketsGrid.innerHTML = '';
             purchaseSuccessSummary.innerHTML = '';
             purchaseSuccessDetail.textContent = 'Gracias por tu compra.';
+            downloadAllTicketsButton.classList.add('hidden');
             lastPurchasedTickets = [];
         }
 
@@ -174,6 +179,7 @@
             const qrSvg = ticket.qrSvg || '<svg></svg>';
             const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
             const eventDate = formatDate(event.event_date, event.event_time);
+            const artistName = event.artist_name || 'Por confirmar';
 
             return `
                 <article class="generated-ticket" data-ticket-index="${index}">
@@ -184,6 +190,7 @@
                         <p class="generated-ticket-kicker">Ticketmaster</p>
                         <h3>${escapeHtml(event.name || 'Evento')}</h3>
                         <p class="generated-ticket-subtitle">${escapeHtml(eventDate)} | ${escapeHtml(event.location || 'Ubicacion por confirmar')}</p>
+                        <p class="generated-ticket-description">Artista: ${escapeHtml(artistName)}</p>
                         <div class="generated-ticket-meta">
                             <div><span>Tipo</span><strong>${escapeHtml(typeName)}</strong></div>
                             <div><span>Asiento</span><strong>${escapeHtml(seatNumber)}</strong></div>
@@ -196,7 +203,6 @@
                         <p>Escanea para validar</p>
                         <div class="generated-ticket-actions">
                             <button type="button" data-download-ticket="${index}">Descargar</button>
-                            <button type="button" data-print-ticket="${index}">Imprimir</button>
                         </div>
                     </div>
                 </article>
@@ -208,11 +214,13 @@
             if (!lastPurchasedTickets.length) {
                 purchaseTicketsWrap.classList.add('hidden');
                 purchaseTicketsGrid.innerHTML = '';
+                downloadAllTicketsButton.classList.add('hidden');
                 return;
             }
 
             purchaseTicketsWrap.classList.remove('hidden');
             purchaseTicketsGrid.innerHTML = lastPurchasedTickets.map(buildTicketCardMarkup).join('');
+            downloadAllTicketsButton.classList.toggle('hidden', lastPurchasedTickets.length <= 1);
             
             // Render QR codes after HTML is inserted
             lastPurchasedTickets.forEach((ticket, index) => {
@@ -320,35 +328,49 @@
             }
         }
 
-        function printTicket(ticketIndex) {
-            const ticket = lastPurchasedTickets[ticketIndex];
-            if (!ticket) {
-                notify('Boleto no encontrado', 'err');
+        async function downloadAllTickets() {
+            if (!lastPurchasedTickets.length) {
+                notify('No hay boletos para descargar', 'err');
+                return;
+            }
+
+            const ticketIds = lastPurchasedTickets
+                .map((ticket) => ticket?.id)
+                .filter((id) => Boolean(id));
+
+            if (!ticketIds.length) {
+                notify('No se encontraron IDs de boletos para descargar', 'err');
                 return;
             }
 
             try {
-                const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-                if (!printWindow) {
-                    notify('El navegador bloqueo la ventana de impresion', 'err');
-                    return;
+                const response = await fetch('/api/tickets/bulk-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+                    },
+                    body: JSON.stringify({ ticket_ids: ticketIds }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Error ${response.status}: no se pudo generar el PDF`);
                 }
 
-                const html = buildStandaloneTicketHtml(ticket);
-                printWindow.document.open();
-                printWindow.document.write(html);
-                printWindow.document.close();
-                
-                // Wait a bit for content to load, then print
-                printWindow.onload = () => {
-                    printWindow.focus();
-                    setTimeout(() => {
-                        printWindow.print();
-                    }, 500);
-                };
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                const stamp = new Date().toISOString().slice(0, 10);
+                anchor.href = url;
+                anchor.download = `boletos-${stamp}.pdf`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                notify(`Se descargaron ${ticketIds.length} boleto(s) en un PDF`, 'ok');
             } catch (err) {
-                console.error('Error imprimiendo boleto:', err);
-                notify('Error: ' + err.message, 'err');
+                notify(err.message, 'err');
             }
         }
 
@@ -767,22 +789,24 @@
                 renderCart();
             });
             document.getElementById('checkoutCart').addEventListener('click', checkoutCart);
+            document.getElementById('downloadAllTickets').addEventListener('click', downloadAllTickets);
             document.getElementById('closePurchaseSuccess').addEventListener('click', () => {
                 hidePurchaseSuccess();
                 window.location.href = '/';
             });
 
+            purchaseSuccessBanner.addEventListener('click', (event) => {
+                if (event.target === purchaseSuccessBanner) {
+                    hidePurchaseSuccess();
+                }
+            });
+
             purchaseTicketsGrid.addEventListener('click', (event) => {
                 const downloadButton = event.target.closest('[data-download-ticket]');
-                const printButton = event.target.closest('[data-print-ticket]');
 
                 if (downloadButton) {
                     downloadTicket(downloadButton.getAttribute('data-download-ticket'));
                     return;
-                }
-
-                if (printButton) {
-                    printTicket(printButton.getAttribute('data-print-ticket'));
                 }
             });
 

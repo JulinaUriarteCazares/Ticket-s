@@ -226,6 +226,18 @@ main {
     color: #fff;
 }
 
+.section-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.secondary-btn {
+    background: #f3eee3;
+    color: #1d2027;
+    border: 1px solid #d8cfbe;
+}
+
 .events-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(295px, 1fr));
@@ -1036,6 +1048,12 @@ select {
     color: #e6ebff;
 }
 
+.create-event-panel {
+    width: min(760px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+}
+
 .auth-panel h3 {
     margin-top: 0;
     margin-bottom: 14px;
@@ -1075,6 +1093,84 @@ select {
 .auth-grid-vertical {
     grid-template-columns: 1fr;
     gap: 8px;
+}
+
+.event-form-grid {
+    gap: 12px;
+}
+
+.event-form-helper-small {
+    margin: 10px 0 0;
+    font-size: 12px;
+    text-align: left;
+}
+
+.image-dropzone {
+    display: grid;
+    place-items: center;
+    gap: 10px;
+    min-height: 220px;
+    padding: 14px;
+    border: 1px dashed #445187;
+    border-radius: 14px;
+    background: #121735;
+    color: #a7b0ce;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.image-dropzone:hover,
+.image-dropzone:focus-visible,
+.image-dropzone.is-dragover {
+    border-color: #45e1d5;
+    background: #151b3d;
+    transform: translateY(-1px);
+}
+
+.image-dropzone-empty {
+    display: grid;
+    gap: 4px;
+    text-align: center;
+}
+
+.image-dropzone-empty strong {
+    font-size: 16px;
+    color: #e6ebff;
+}
+
+.image-dropzone-empty span {
+    font-size: 13px;
+}
+
+.image-dropzone-preview {
+    width: 100%;
+    max-height: 280px;
+    object-fit: contain;
+    object-position: center;
+    border-radius: 12px;
+    border: 0;
+    background: transparent;
+}
+
+.event-form-grid textarea {
+    width: 100%;
+    background: #171c33;
+    color: #e8eeff;
+    border: 1px solid #27315b;
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-height: 110px;
+    resize: vertical;
+}
+
+.event-form-grid textarea::placeholder {
+    color: #8d96b8;
+}
+
+.event-form-helper {
+    margin: 0 0 14px;
+    color: #a7b0ce;
+    font-size: 14px;
 }
 
 .auth-grid-vertical input {

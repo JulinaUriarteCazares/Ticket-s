@@ -386,7 +386,7 @@
                             <h3>${event.name || 'Evento'}</h3>
                             <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
                         </div>
-                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || eventFromList?.artist_name || 'Por confirmar'}</p>
                         <div class="admin-metric-grid">
                             <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(event.tickets_sold || 0)}</strong></div>
                             <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(event.tickets_unsold || 0)}</strong></div>
@@ -531,8 +531,7 @@
             state.token = null;
             state.user = null;
             state.adminInsights = [];
-            setAuthUi();
-            notify('Sesion cerrada', 'info');
+            window.location.replace('/');
         }
 
         loginButton.addEventListener('click', openLoginModal);
