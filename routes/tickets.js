@@ -7,6 +7,68 @@ const puppeteer = require('puppeteer');
 
 const router = express.Router();
 
+let activeSupportChecked = false;
+let activeSupported = false;
+
+async function ensureActiveSupport() {
+  if (activeSupportChecked) {
+    return activeSupported;
+  }
+
+  try {
+    const check = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'events' AND column_name = 'active'
+       LIMIT 1`
+    );
+
+    if (check.rows.length > 0) {
+      activeSupported = true;
+      activeSupportChecked = true;
+      return true;
+    }
+
+    await pool.query('ALTER TABLE events ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE');
+    activeSupported = true;
+  } catch (err) {
+    if (err.code === '42701') {
+      activeSupported = true;
+    } else {
+      activeSupported = false;
+    }
+  }
+
+  activeSupportChecked = true;
+  return activeSupported;
+}
+
+function buildEventDateTime(eventDate, eventTime) {
+  if (!eventDate) {
+    return null;
+  }
+
+  const datePart = String(eventDate).slice(0, 10);
+  const timePart = eventTime ? String(eventTime).slice(0, 8) : '23:59:59';
+  const candidate = new Date(`${datePart}T${timePart}`);
+
+  if (!Number.isNaN(candidate.getTime())) {
+    return candidate;
+  }
+
+  const fallback = new Date(eventDate);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function isPastEvent(event) {
+  const eventDateTime = buildEventDateTime(event?.event_date, event?.event_time);
+  if (!eventDateTime) {
+    return false;
+  }
+
+  return eventDateTime.getTime() < Date.now();
+}
+
 // Comprar ticket (con asiento)
 router.post('/purchase', auth, async (req, res) => {
   const { ticket_type_id, quantity = 1 } = req.body;
@@ -23,6 +85,7 @@ router.post('/purchase', auth, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    const supportsActive = await ensureActiveSupport();
     await client.query('BEGIN');
 
     const typeResult = await client.query(
@@ -32,13 +95,21 @@ router.post('/purchase', auth, async (req, res) => {
     const ticketType = typeResult.rows[0];
     if (!ticketType) throw new Error('Tipo de boleto no existe');
 
-    const eventResult = await client.query(
-      `SELECT id, name, event_date, event_time, location, image_url, description
-       FROM events
-       WHERE id = $1`,
-      [ticketType.event_id]
-    );
+    const eventQuery = supportsActive
+      ? `SELECT id, name, event_date, event_time, location, image_url, description, active
+         FROM events
+         WHERE id = $1`
+      : `SELECT id, name, event_date, event_time, location, image_url, description, TRUE::boolean AS active
+         FROM events
+         WHERE id = $1`;
+    const eventResult = await client.query(eventQuery, [ticketType.event_id]);
     const event = eventResult.rows[0];
+    if (event && isPastEvent(event)) {
+      throw new Error('Este evento ya paso y no admite compras');
+    }
+    if (event && supportsActive && event.active === false) {
+      throw new Error('Este evento esta inactivo y no admite compras');
+    }
 
     const available = Number(ticketType.capacity) - Number(ticketType.sold);
     if (available < qty) {

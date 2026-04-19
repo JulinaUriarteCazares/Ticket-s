@@ -682,11 +682,23 @@
         }
 
         async function loadEvent() {
-            const event = await apiCall('GET', `/events/${state.eventId}`);
-            const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
-            state.event = { ...event, ticketTypes };
-            renderEventHeader();
-            renderAccess();
+            try {
+                const event = await apiCall('GET', `/events/${state.eventId}`);
+                const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
+                state.event = { ...event, ticketTypes };
+                renderEventHeader();
+                renderAccess();
+            } catch (err) {
+                if (String(err.message || '').toLowerCase().includes('evento no encontrado')) {
+                    document.querySelector('main').innerHTML = '<section class="panel"><h1 class="title">Compra no disponible</h1><p class="meta">Este evento ya paso o no existe.</p><div class="actions"><button type="button" id="returnHomeExpired">Volver al inicio</button></div></section>';
+                    document.getElementById('returnHomeExpired').addEventListener('click', () => {
+                        window.location.href = '/';
+                    });
+                    return;
+                }
+
+                throw err;
+            }
         }
 
         async function init() {

@@ -33,6 +33,7 @@
                     </div>
                     <p id="eventMeta" class="meta"></p>
                     <p id="eventDescription" class="meta"></p>
+                    <button id="deactivateEventInline" class="image-btn hidden" type="button">Desactivar evento</button>
                 </div>
 
                 <section class="panel ticket-panel ticket-panel-inline">
@@ -89,6 +90,7 @@
                 <div id="editPanel" class="edit-subpanel hidden">
                     <div class="manager-box">
                         <h3>Resumen del evento</h3>
+                        <p id="organizerEventStatus" class="helper">Estado: Activo</p>
                         <p id="organizerCapacity" class="helper">Capacidad del evento: 0</p>
                         <p id="organizerCapacityUsage" class="helper">Capacidad en boletos: 0</p>
                     </div>
@@ -211,6 +213,8 @@
         const eventCartItems = document.getElementById('eventCartItems');
         const eventCartTotal = document.getElementById('eventCartTotal');
         const eventBottomCtaWrap = document.getElementById('eventBottomCtaWrap');
+        const deactivateEventInlineBtn = document.getElementById('deactivateEventInline');
+        const organizerEventStatus = document.getElementById('organizerEventStatus');
         const eventFieldIds = [
             'editName',
             'editLocation',
@@ -263,6 +267,10 @@
 
         function isViewer(event) {
             return !canEditEvent(event);
+        }
+
+        function isEventActive(event) {
+            return event && event.active !== false;
         }
 
         async function apiCall(method, url, body = null) {
@@ -341,6 +349,8 @@
 
             ticketCountPill.textContent = `${visibleRows.length} tipo${visibleRows.length === 1 ? '' : 's'}`;
             ticketEmptyState.classList.toggle('hidden', visibleRows.length !== 0);
+            organizerEventStatus.textContent = `Estado: ${isEventActive(event) ? 'Activo' : 'Inactivo'}`;
+            deactivateEventInlineBtn.classList.toggle('hidden', !editable || !isEventActive(event));
             document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
             document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
             if (viewer) {
@@ -399,6 +409,27 @@
             }
 
             renderEventCart();
+        }
+
+        async function deactivateEventInline() {
+            const event = state.event;
+            if (!event || !canEditEvent(event)) {
+                notify('No autorizado para cambiar el estado del evento', 'err');
+                return;
+            }
+
+            if (!isEventActive(event)) {
+                notify('El evento ya esta inactivo', 'info');
+                return;
+            }
+
+            try {
+                await apiCall('PATCH', `/events/${state.eventId}/active`, { active: false });
+                notify('Evento desactivado', 'ok');
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
         }
 
         function getTicketTypeById(ticketTypeId) {
@@ -645,10 +676,22 @@
         }
 
         async function loadEvent() {
-            const event = await apiCall('GET', `/events/${state.eventId}`);
-            const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
-            state.event = { ...event, ticketTypes };
-            renderEvent();
+            try {
+                const event = await apiCall('GET', `/events/${state.eventId}`);
+                const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
+                state.event = { ...event, ticketTypes };
+                renderEvent();
+            } catch (err) {
+                if (String(err.message || '').toLowerCase().includes('evento no encontrado')) {
+                    document.querySelector('main').innerHTML = '<section class="panel"><h1 class="title">Evento no disponible</h1><p class="meta">Este evento ya paso o no existe.</p><div class="actions"><button type="button" id="returnHomeExpired">Volver al inicio</button></div></section>';
+                    document.getElementById('returnHomeExpired').addEventListener('click', () => {
+                        window.location.href = '/';
+                    });
+                    return;
+                }
+
+                throw err;
+            }
         }
 
         async function saveEvent() {
@@ -820,6 +863,7 @@
         document.getElementById('saveEvent').addEventListener('click', saveEvent);
         imageQuickAction.addEventListener('click', () => imagePicker.click());
         document.getElementById('deleteEvent').addEventListener('click', deleteEvent);
+        deactivateEventInlineBtn.addEventListener('click', deactivateEventInline);
         imagePicker.addEventListener('change', handleImageSelection);
         goToCheckout.addEventListener('click', () => {
             window.location.href = `/purchase.html?id=${encodeURIComponent(state.eventId)}`;

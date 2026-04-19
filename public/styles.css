@@ -273,8 +273,33 @@ main {
 
 .event-card-actions {
     display: flex;
+    align-items: center;
+    gap: 8px;
     justify-content: flex-end;
     margin-top: -4px;
+}
+
+.event-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid #d8cfbd;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.event-status-badge.is-active {
+    color: #0d5d39;
+    border-color: #a6d0bc;
+    background: #e9f8ef;
+}
+
+.event-status-badge.is-inactive {
+    color: #8a2a1b;
+    border-color: #e0b4ad;
+    background: #fbe9e6;
 }
 
 .image-btn {
@@ -423,6 +448,11 @@ main {
     border-radius: 10px;
     background: #fffdf8;
     padding: 8px 10px;
+}
+
+.preview-info .image-btn {
+    justify-self: start;
+    margin-top: 2px;
 }
 
 .event-heading-row {

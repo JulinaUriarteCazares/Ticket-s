@@ -250,6 +250,20 @@
             return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
         }
 
+        function isEventActive(event) {
+            return event && event.active !== false;
+        }
+
+        async function toggleEventActive(eventId, nextState) {
+            try {
+                await apiCall('PATCH', `/events/${eventId}/active`, { active: nextState });
+                notify(nextState ? 'Evento activado' : 'Evento desactivado', 'ok');
+                await loadEvents();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
         function renderEvents() {
             eventsRoot.innerHTML = '';
 
@@ -265,15 +279,23 @@
                 const card = document.createElement('article');
                 card.className = 'event-card';
                 card.setAttribute('data-event-open', event.id);
+                const active = isEventActive(event);
 
                 const imageHtml = event.image_url
                     ? `<img class="event-image" src="${event.image_url}" alt="Imagen de ${event.name}" loading="lazy">`
                     : '<div class="event-image-placeholder">Sin imagen</div>';
 
+                const managerControls = `
+                    <div class="event-card-actions">
+                        <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
+                    </div>
+                `;
+
                 card.innerHTML = `
                     ${imageHtml}
                     <h3>${event.name}</h3>
                     <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                    ${managerControls}
                 `;
 
                 eventsRoot.appendChild(card);
