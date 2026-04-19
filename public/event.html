@@ -624,6 +624,19 @@
             adminEventReportSection.classList.toggle('hidden', !adminView);
 
             const cards = visibleRows.map((type) => {
+                const inCart = state.cart.find((item) => String(item.ticketTypeId) === String(type.id));
+                const selectedQty = inCart ? inCart.quantity : 0;
+                if (canBuy) {
+                    return `<article class="ticket-card-row">
+                        <div class="ticket-row-name">${type.type_name}</div>
+                        <div class="ticket-row-price">$${Number(type.price).toFixed(2)}</div>
+                        <div class="ticket-row-stepper">
+                            <button type="button" class="ticket-stepper-btn" data-card-dec-ticket="${type.id}" aria-label="Restar boleto">−</button>
+                            <span class="ticket-stepper-value">${selectedQty}</span>
+                            <button type="button" class="ticket-stepper-btn ticket-stepper-btn-plus" data-card-inc-ticket="${type.id}" aria-label="Sumar boleto">+</button>
+                        </div>
+                    </article>`;
+                }
                 return `<article class="ticket-card">
                     <span class="ticket-badge">${type.type_name}</span>
                     <h3>$${Number(type.price).toFixed(2)}</h3>
@@ -812,12 +825,16 @@
             }
 
             notify('Boleto agregado al carrito', 'ok');
+            state.checkoutOpen = true;
             renderEventCart();
             renderEvent();
         }
 
         function removeEventCartItem(ticketTypeId) {
             state.cart = state.cart.filter((item) => String(item.ticketTypeId) !== String(ticketTypeId));
+            if (!state.cart.length) {
+                state.checkoutOpen = false;
+            }
             renderEventCart();
             renderEvent();
         }
@@ -866,6 +883,7 @@
             }
 
             state.cart = [];
+            state.checkoutOpen = false;
 
             if (success > 0) {
                 notify('Compra completada', 'ok');
@@ -1296,6 +1314,35 @@
             const deleteButton = event.target.closest('[data-delete-ticket-type]');
             if (deleteButton) {
                 deleteTicketType(deleteButton.dataset.deleteTicketType);
+                return;
+            }
+
+            const decreaseButton = event.target.closest('[data-card-dec-ticket]');
+            if (decreaseButton) {
+                const ticketTypeId = decreaseButton.dataset.cardDecTicket;
+                const inCart = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId));
+                if (inCart) {
+                    removeEventCartItem(ticketTypeId);
+                }
+                return;
+            }
+
+            const increaseButton = event.target.closest('[data-card-inc-ticket]');
+            if (increaseButton) {
+                const ticketTypeId = increaseButton.dataset.cardIncTicket;
+                const ticketType = getTicketTypeById(ticketTypeId);
+                if (!ticketType) {
+                    return;
+                }
+
+                const available = Number(ticketType.capacity || 0) - Number(ticketType.sold || 0) - getCartReservedQty(ticketTypeId);
+                const inCart = state.cart.find((item) => String(item.ticketTypeId) === String(ticketTypeId));
+                if (inCart) {
+                    updateEventCartItemQuantity(ticketTypeId, inCart.quantity + 1);
+                } else {
+                    addTicketToEventCart(ticketTypeId, 1);
+                }
+                return;
             }
         });
 

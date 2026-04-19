@@ -972,6 +972,94 @@ select {
     gap: 8px;
 }
 
+.ticket-list:has(.ticket-card-row) {
+    grid-template-columns: 1fr;
+}
+
+.ticket-card-row {
+    border: 1px solid #e4dac8;
+    border-radius: 12px;
+    background: #f5f0e8;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(22, 26, 36, 0.05);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.ticket-card-row:hover {
+    transform: translateY(-1px);
+    background: #ede7d9;
+}
+
+.ticket-row-name {
+    flex: 0 0 140px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e2532;
+}
+
+.ticket-row-price {
+    flex: 0 0 90px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e2532;
+}
+
+.ticket-row-stepper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.ticket-row-stepper .ticket-stepper-btn {
+    width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    border: 1px solid var(--line);
+    background: #f3ede0;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 22px;
+}
+
+.ticket-row-stepper .ticket-stepper-btn:hover {
+    filter: brightness(0.92);
+}
+
+.ticket-row-stepper .ticket-stepper-btn-plus {
+    background: linear-gradient(135deg, var(--brand), var(--brand-hover));
+    color: #fff;
+    border-color: var(--brand-hover);
+}
+
+.ticket-row-stepper .ticket-stepper-btn-plus:hover {
+    filter: brightness(1.08);
+}
+
+.ticket-stepper-value {
+    min-width: 20px;
+    height: 22px;
+    margin: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
 .ticket-card {
     border: 1px solid #e4dac8;
     border-radius: 10px;
@@ -1618,6 +1706,22 @@ select {
 
     .checkout-head {
         display: none;
+    }
+
+    .ticket-card-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .ticket-row-name,
+    .ticket-row-price {
+        flex: 1 0 auto;
+    }
+
+    .ticket-row-stepper {
+        width: 100%;
+        margin-left: 0;
+        justify-content: center;
     }
 
     .event-bottom-cta {

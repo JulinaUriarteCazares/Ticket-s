@@ -810,6 +810,95 @@ button:focus-visible {
     gap: 8px;
 }
 
+.ticket-list:has(.ticket-card-row) {
+    grid-template-columns: 1fr;
+}
+
+.ticket-card-row {
+    border: 1px solid #e4dac8;
+    border-radius: 12px;
+    background: #f5f0e8;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(22, 26, 36, 0.05);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.ticket-card-row:hover {
+    transform: translateY(-1px);
+    background: #ede7d9;
+}
+
+.ticket-row-name {
+    flex: 0 0 140px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e2532;
+}
+
+.ticket-row-price {
+    flex: 0 0 80px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e2532;
+}
+
+.ticket-row-stepper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.ticket-stepper-btn {
+    border: 1px solid #ccc;
+    background: #e8e8e8;
+    color: #333;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ticket-stepper-btn:hover {
+    filter: brightness(0.92);
+}
+
+.ticket-stepper-btn-plus {
+    background: linear-gradient(135deg, #4a90e2, #357abd);
+    color: #fff;
+    border-color: #2e5ba3;
+}
+
+.ticket-stepper-btn-plus:hover {
+    filter: brightness(1.08);
+}
+
+.ticket-stepper-value {
+    margin: 0 8px;
+    min-width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    border: none;
+    border-radius: 0;
+}
+
 .ticket-card {
     border: 1px solid #e4dac8;
     border-radius: 12px;
@@ -1293,6 +1382,25 @@ button:focus-visible {
 
     .checkout-head {
         display: none;
+    }
+
+    .ticket-card-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .ticket-row-name {
+        flex: 1 0 auto;
+    }
+
+    .ticket-row-price {
+        flex: 1 0 auto;
+    }
+
+    .ticket-row-stepper {
+        width: 100%;
+        margin-left: 0;
+        justify-content: center;
     }
 
     .event-bottom-cta {
