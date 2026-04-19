@@ -4,6 +4,73 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
+async function getAdminEventsOverviewRows() {
+  const withActiveQuery = `
+    SELECT
+      e.id,
+      e.name,
+      e.location,
+      e.event_date,
+      e.event_time,
+      e.active,
+      COALESCE(e.artist_fee, 0) AS artist_fee,
+      COALESCE(SUM(tt.capacity), 0) AS ticket_capacity,
+      COALESCE(SUM(tt.sold), 0) AS tickets_sold,
+      COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0)), 0) AS tickets_unsold,
+      COALESCE(SUM(tt.sold * tt.price), 0) AS total_income,
+      COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0) * tt.price), 0) AS unsold_potential
+    FROM events e
+    LEFT JOIN ticket_types tt ON tt.event_id = e.id
+    GROUP BY e.id
+    ORDER BY e.event_date DESC, e.event_time DESC
+  `;
+
+  const withoutActiveQuery = `
+    SELECT
+      e.id,
+      e.name,
+      e.location,
+      e.event_date,
+      e.event_time,
+      TRUE::boolean AS active,
+      COALESCE(e.artist_fee, 0) AS artist_fee,
+      COALESCE(SUM(tt.capacity), 0) AS ticket_capacity,
+      COALESCE(SUM(tt.sold), 0) AS tickets_sold,
+      COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0)), 0) AS tickets_unsold,
+      COALESCE(SUM(tt.sold * tt.price), 0) AS total_income,
+      COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0) * tt.price), 0) AS unsold_potential
+    FROM events e
+    LEFT JOIN ticket_types tt ON tt.event_id = e.id
+    GROUP BY e.id
+    ORDER BY e.event_date DESC, e.event_time DESC
+  `;
+
+  try {
+    const result = await pool.query(withActiveQuery);
+    return result.rows;
+  } catch (err) {
+    if (err.code !== '42703') {
+      throw err;
+    }
+
+    const fallback = await pool.query(withoutActiveQuery);
+    return fallback.rows;
+  }
+}
+
+router.get('/admin/events-overview', auth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const rows = await getAdminEventsOverviewRows();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Reporte dinámico (en vivo)
 router.get('/event/:eventId', auth, async (req, res) => {
   const { eventId } = req.params;

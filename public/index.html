@@ -38,6 +38,13 @@
             </div>
             <div id="eventsRoot" class="events-grid"></div>
         </section>
+
+        <section id="adminInsightsSection" class="hidden">
+            <div class="section-head">
+                <h2>Panel de admin</h2>
+            </div>
+            <div id="adminInsightsRoot" class="admin-insights-grid"></div>
+        </section>
     </main>
 
     <div id="loginModal" class="auth-modal" aria-hidden="true">
@@ -99,7 +106,8 @@
         const state = {
             token: localStorage.getItem('tm_token') || null,
             user: null,
-            events: []
+            events: [],
+            adminInsights: []
         };
 
         const loginModal = document.getElementById('loginModal');
@@ -110,6 +118,8 @@
         const sessionLabel = document.getElementById('sessionLabel');
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
+        const adminInsightsSection = document.getElementById('adminInsightsSection');
+        const adminInsightsRoot = document.getElementById('adminInsightsRoot');
         const regRoleWrap = document.getElementById('regRoleWrap');
         const regRoleHint = document.getElementById('regRoleHint');
 
@@ -119,6 +129,10 @@
 
         function isRegularUser() {
             return state.user && state.user.role === 'user';
+        }
+
+        function isAdmin() {
+            return state.user && state.user.role === 'admin';
         }
 
         function parseUserFromToken(token) {
@@ -172,6 +186,8 @@
                 document.getElementById('heroTitle').textContent = 'Compra boletos en segundos';
                 document.getElementById('heroCopy').textContent = 'Revisa todos los eventos disponibles y entra al detalle para conseguir tus boletos.';
             }
+
+            adminInsightsSection.classList.toggle('hidden', !isAdmin());
         }
 
         async function apiCall(method, url, body = null) {
@@ -264,6 +280,67 @@
             }
         }
 
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(Number(amount || 0));
+        }
+
+        function renderAdminInsights() {
+            if (!isAdmin()) {
+                adminInsightsRoot.innerHTML = '';
+                return;
+            }
+
+            if (!state.adminInsights.length) {
+                adminInsightsRoot.innerHTML = '<div class="empty">No hay eventos para mostrar.</div>';
+                return;
+            }
+
+            adminInsightsRoot.innerHTML = state.adminInsights.map((event) => {
+                const active = event.active !== false;
+                const artistFee = Number(event.artist_fee || 0);
+                const totalIncome = Number(event.total_income || 0);
+                const totalGain = totalIncome - artistFee;
+                return `
+                    <article class="admin-report-card">
+                        <div class="admin-report-head">
+                            <h3>${event.name || 'Evento'}</h3>
+                            <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
+                        </div>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        <div class="admin-metric-grid">
+                            <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(event.tickets_sold || 0)}</strong></div>
+                            <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(event.tickets_unsold || 0)}</strong></div>
+                            <div class="admin-metric-item"><span>Tarifa del artista</span><strong>$${formatMoney(artistFee)}</strong></div>
+                            <div class="admin-metric-item"><span>Total del evento (ventas)</span><strong>$${formatMoney(totalIncome)}</strong></div>
+                            <div class="admin-metric-item"><span>Ganancia neta</span><strong>$${formatMoney(totalGain)}</strong></div>
+                            <div class="admin-metric-item"><span>Potencial no vendido</span><strong>$${formatMoney(event.unsold_potential)}</strong></div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        async function loadAdminInsights() {
+            if (!isAdmin()) {
+                state.adminInsights = [];
+                renderAdminInsights();
+                return;
+            }
+
+            adminInsightsRoot.innerHTML = '<div class="loader">Cargando panel admin...</div>';
+            try {
+                const rows = await apiCall('GET', '/reports/admin/events-overview');
+                state.adminInsights = Array.isArray(rows) ? rows : [];
+                renderAdminInsights();
+            } catch (err) {
+                adminInsightsRoot.innerHTML = '<div class="empty">No se pudo cargar el panel admin.</div>';
+                notify(err.message, 'err');
+            }
+        }
+
         function renderEvents() {
             eventsRoot.innerHTML = '';
 
@@ -333,6 +410,8 @@
                 setAuthUi();
                 closeLoginModal();
                 notify(`Bienvenido ${result.user.name}`, 'ok');
+                await loadEvents();
+                await loadAdminInsights();
             } catch (err) {
                 notify(err.message, 'err');
             }
@@ -392,12 +471,14 @@
             setAuthUi();
         }
 
-        function logoutHandler() {
+        async function logoutHandler() {
             localStorage.removeItem('tm_token');
             localStorage.removeItem('tm_user');
             state.token = null;
             state.user = null;
+            state.adminInsights = [];
             setAuthUi();
+            await loadEvents();
             notify('Sesion cerrada', 'info');
         }
 
@@ -416,7 +497,10 @@
         });
         document.getElementById('doLogin').addEventListener('click', loginHandler);
         document.getElementById('doRegister').addEventListener('click', registerHandler);
-        document.getElementById('refreshEvents').addEventListener('click', loadEvents);
+        document.getElementById('refreshEvents').addEventListener('click', async () => {
+            await loadEvents();
+            await loadAdminInsights();
+        });
 
         loginModal.addEventListener('click', (event) => {
             if (event.target === loginModal) {
@@ -442,6 +526,7 @@
         (async function init() {
             await restoreSession();
             await loadEvents();
+            await loadAdminInsights();
             notify('Inicio listo para comprar boletos', 'info');
         })();
     </script>

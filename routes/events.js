@@ -81,7 +81,7 @@ function canManageEvent(user, organizerId) {
     return false;
   }
 
-  return user.role === 'admin' || user.role === 'organizer' || String(organizerId) === String(user.id);
+  return user.role === 'organizer' || String(organizerId) === String(user.id);
 }
 
 function normalizeTicketCategory(rawTypeName) {
@@ -220,7 +220,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', auth, async (req, res) => {
-  if (req.user.role !== 'organizer' && req.user.role !== 'admin') {
+  if (req.user.role !== 'organizer') {
     return res.status(403).json({ error: 'No autorizado' });
   }
   const { name, location, event_date, event_time, description, capacity, artist_name, artist_fee, image_url = null } = req.body;

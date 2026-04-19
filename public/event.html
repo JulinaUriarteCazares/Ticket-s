@@ -271,11 +271,7 @@
                 return false;
             }
 
-            if (state.user.role === 'admin') {
-                return true;
-            }
-
-            return state.user.role === 'organizer' || String(state.user.id) === String(event.organizer_id);
+            return state.user.role === 'organizer' && String(state.user.id) === String(event.organizer_id);
         }
 
         function isRegularUser() {
@@ -284,6 +280,10 @@
 
         function isViewer(event) {
             return !canEditEvent(event);
+        }
+
+        function canUseCheckoutAsViewer() {
+            return !state.user || state.user.role === 'user';
         }
 
         function isEventActive(event) {
@@ -347,6 +347,7 @@
             const editable = canEditEvent(event);
             const canBuy = isRegularUser();
             const viewer = isViewer(event);
+            const checkoutViewer = viewer && canUseCheckoutAsViewer();
             const ticketTypes = event.ticketTypes || [];
             const totalTicketCapacity = ticketTypes.reduce((sum, type) => sum + Number(type.capacity || 0), 0);
             const ticketRows = ticketTypes.map((type) => {
@@ -359,7 +360,7 @@
                     remaining,
                 };
             });
-            const visibleRows = viewer
+            const visibleRows = checkoutViewer
                 ? ticketRows.filter((type) => type.remaining > 0)
                 : ticketRows;
             const totalVisibleAvailable = visibleRows.reduce((sum, type) => sum + Number(type.remaining || 0), 0);
@@ -370,24 +371,26 @@
             deactivateEventInlineBtn.classList.toggle('hidden', !editable || !isEventActive(event));
             document.getElementById('organizerCapacity').textContent = `Capacidad del evento: ${Number(event.capacity || 0)}`;
             document.getElementById('organizerCapacityUsage').textContent = `Capacidad en boletos: ${totalTicketCapacity}`;
-            if (viewer) {
+            if (checkoutViewer) {
                 ticketSummaryCopy.textContent = `Disponibles en total: ${totalVisibleAvailable} boletos.`;
-            } else {
+            } else if (editable) {
                 ticketSummaryCopy.textContent = 'Administra y compara precio, capacidad y disponibilidad en el mismo bloque.';
+            } else {
+                ticketSummaryCopy.textContent = 'Consulta disponibilidad, precio y boletos vendidos por tipo.';
             }
 
             const cards = visibleRows.map((type) => {
                 return `<article class="ticket-card">
                     <span class="ticket-badge">${type.type_name}</span>
                     <h3>$${Number(type.price).toFixed(2)}</h3>
-                    <div class="ticket-stats ${viewer ? 'ticket-stats-simple' : ''}">
+                    <div class="ticket-stats ${checkoutViewer ? 'ticket-stats-simple' : ''}">
                         <div class="ticket-stat"><span>Disponibles</span><strong>${Number(type.remaining)}</strong></div>
                         ${editable
                             ? `<div class="ticket-stat"><span>Capacidad</span><strong>${Number(type.capacity)}</strong></div>`
                             : `<div class="ticket-stat"><span>Precio</span><strong>$${Number(type.price).toFixed(2)}</strong></div>`
                         }
                     </div>
-                    ${editable ? `<div class="ticket-stat"><span>Vendidos</span><strong>${Number(type.sold || 0)}</strong></div>` : ''}
+                    ${editable || !checkoutViewer ? `<div class="ticket-stat"><span>Vendidos</span><strong>${Number(type.sold || 0)}</strong></div>` : ''}
                     ${editable ? `
                         <div class="actions">
                             <button type="button" data-edit-ticket-type="${type.id}">Editar</button>
@@ -398,7 +401,7 @@
             }).join('');
 
             body.innerHTML = cards;
-            ticketCheckoutRows.innerHTML = viewer
+            ticketCheckoutRows.innerHTML = checkoutViewer
                 ? visibleRows.map((type) => `
                     <div class="checkout-row">
                         <strong>${type.type_name}</strong>
@@ -417,9 +420,9 @@
             imageQuickAction.classList.toggle('hidden', !editable);
             quickEditEvent.classList.toggle('hidden', !editable);
             openTicketCreatorInline.classList.toggle('hidden', !editable);
-            eventBottomCtaWrap.classList.toggle('hidden', !viewer || visibleRows.length === 0);
-            goToCheckout.classList.toggle('hidden', !viewer || visibleRows.length === 0);
-            ticketCheckoutSection.classList.toggle('hidden', !viewer || !state.checkoutOpen || visibleRows.length === 0);
+            eventBottomCtaWrap.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0);
+            goToCheckout.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0);
+            ticketCheckoutSection.classList.toggle('hidden', !checkoutViewer || !state.checkoutOpen || visibleRows.length === 0);
             eventCartPanel.classList.toggle('hidden', !canBuy || !state.checkoutOpen);
             if (editable) {
                 fillEditForm(event);
