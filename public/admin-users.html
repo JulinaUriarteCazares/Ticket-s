@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticketmaster Clone | Administrar usuarios</title>
+    <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand brand-link" href="/" aria-label="Ir al inicio">
+            <div class="brand-mark">TM</div>
+            <span>Ticketmaster Clone</span>
+        </a>
+        <div class="topbar-right">
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
+            <div class="topbar-actions">
+                <button id="backToAdminButton" class="auth-mini secondary hidden" type="button">Volver al panel</button>
+                <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
+                <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section id="heroBanner" class="hero hero-organizer admin-users-hero">
+            <div class="hero-kicker">Panel exclusivo de admin</div>
+            <h1 id="heroTitle">Centro de administracion de usuarios</h1>
+            <p id="heroCopy">Vista dedicada para crear cuentas y administrar permisos. La modificacion solo permite rol organizer o admin.</p>
+        </section>
+
+        <section id="adminUsersSection" class="hidden admin-users-shell">
+            <div class="admin-users-toolbar">
+                <div>
+                    <h2>Gestion de usuarios</h2>
+                    <p class="admin-user-note">Puedes crear usuarios y cambiar su rol solo a organizer/admin. No se permite cambiar a user desde editar.</p>
+                </div>
+                <button id="refreshUsersButton" class="refresh-btn" type="button">Actualizar usuarios</button>
+            </div>
+
+            <div id="userStatsRoot" class="admin-users-kpis"></div>
+
+            <div class="admin-users-grid">
+                <article class="admin-user-card admin-user-card-create">
+                    <h3>Crear usuario</h3>
+                    <p class="admin-user-note">Para cuentas nuevas desde este panel solo puedes crear organizer o admin.</p>
+                    <div class="admin-user-form">
+                        <label class="field-label" for="adminUserName">Nombre</label>
+                        <input id="adminUserName" type="text" placeholder="Nombre del usuario" autocomplete="off" spellcheck="false">
+                        <label class="field-label" for="adminUserEmail">Correo electronico</label>
+                        <input id="adminUserEmail" type="email" placeholder="correo@ejemplo.com" autocomplete="off" autocapitalize="off" spellcheck="false">
+                        <label class="field-label" for="adminUserPassword">Contrasena</label>
+                        <input id="adminUserPassword" type="password" placeholder="******" autocomplete="new-password">
+                        <label class="field-label" for="adminUserPasswordConfirm">Confirmar contrasena</label>
+                        <input id="adminUserPasswordConfirm" type="password" placeholder="******" autocomplete="new-password">
+                        <label class="field-label" for="adminUserRole">Rol</label>
+                        <select id="adminUserRole">
+                            <option value="organizer">Organizador</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="auth-actions">
+                        <button id="createUserButton" class="action-primary login-submit" type="button">Crear usuario</button>
+                    </div>
+                </article>
+
+                <article class="admin-user-card admin-user-card-list">
+                    <div class="section-title-row admin-user-card-head">
+                        <div>
+                            <h3>Usuarios registrados</h3>
+                            <p class="admin-user-note">Editar cambia solo el rol a organizer/admin.</p>
+                        </div>
+                    </div>
+                    <div id="usersRoot" class="admin-user-list"></div>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <div id="toastRoot" class="toasts" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        const state = {
+            token: localStorage.getItem('tm_token') || null,
+            user: null,
+            users: []
+        };
+
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
+        const loginButton = document.getElementById('loginButton');
+        const registerButton = document.getElementById('registerButton');
+        const backToAdminButton = document.getElementById('backToAdminButton');
+        const adminUsersSection = document.getElementById('adminUsersSection');
+        const refreshUsersButton = document.getElementById('refreshUsersButton');
+        const createUserButton = document.getElementById('createUserButton');
+        const usersRoot = document.getElementById('usersRoot');
+        const userStatsRoot = document.getElementById('userStatsRoot');
+        const toastRoot = document.getElementById('toastRoot');
+
+        document.body.classList.add('admin-users-page');
+
+        function isAdmin() {
+            return state.user && state.user.role === 'admin';
+        }
+
+        function getRoleRoute(role) {
+            if (role === 'admin') {
+                return '/admin.html';
+            }
+            if (role === 'organizer') {
+                return '/organizer.html';
+            }
+            return '/';
+        }
+
+        function getMinPasswordLength(role) {
+            const normalizedRole = String(role || '').trim().toLowerCase();
+            if (normalizedRole === 'organizer' || normalizedRole === 'admin') {
+                return 4;
+            }
+            return 6;
+        }
+
+        function parseUserFromToken(token) {
+            try {
+                const payload = token.split('.')[1];
+                const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const json = atob(normalized);
+                const data = JSON.parse(json);
+                if (!data || !data.id || !data.role) {
+                    return null;
+                }
+                return { id: data.id, role: data.role, name: data.role };
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function notify(message, kind = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${kind}`;
+            toast.textContent = message;
+            toastRoot.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 3500);
+        }
+
+        function renderSessionMenu() {
+            if (!state.user) {
+                sessionMenu.innerHTML = '';
+                return;
+            }
+
+            sessionMenu.innerHTML = [
+                '<button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>',
+                '<button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>',
+            ].join('');
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
+        function setTopbarUi() {
+            if (state.user) {
+                sessionMenuButton.textContent = `${state.user.name}`;
+                sessionMenuButton.classList.remove('hidden');
+                loginButton.classList.add('hidden');
+                registerButton.classList.add('hidden');
+                backToAdminButton.classList.toggle('hidden', !isAdmin());
+                renderSessionMenu();
+            } else {
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
+                loginButton.classList.remove('hidden');
+                registerButton.classList.remove('hidden');
+                backToAdminButton.classList.add('hidden');
+                sessionMenu.innerHTML = '';
+                closeSessionMenu();
+            }
+
+            adminUsersSection.classList.toggle('hidden', !isAdmin());
+        }
+
+        async function apiCall(method, url, body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (state.token) {
+                headers.Authorization = `Bearer ${state.token}`;
+            }
+
+            const res = await fetch(`/api${url}`, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null,
+            });
+
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (err) {
+                data = {};
+            }
+
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo completar la accion');
+            }
+            return data;
+        }
+
+        function renderUsers() {
+            if (!isAdmin()) {
+                usersRoot.innerHTML = '';
+                userStatsRoot.innerHTML = '';
+                return;
+            }
+
+            const manageableUsers = state.users.filter((user) => {
+                const role = String(user?.role || '').toLowerCase();
+                return role === 'organizer' || role === 'admin';
+            });
+
+            const stats = manageableUsers.reduce((acc, user) => {
+                const role = String(user?.role || 'user');
+                acc.totalManageable += 1;
+                if (role === 'admin') {
+                    acc.admin += 1;
+                } else if (role === 'organizer') {
+                    acc.organizer += 1;
+                }
+                return acc;
+            }, { totalManageable: 0, admin: 0, organizer: 0 });
+
+            userStatsRoot.innerHTML = `
+                <article class="admin-kpi-card">
+                    <span>Total visibles</span>
+                    <strong>${stats.totalManageable}</strong>
+                </article>
+                <article class="admin-kpi-card">
+                    <span>Admins</span>
+                    <strong>${stats.admin}</strong>
+                </article>
+                <article class="admin-kpi-card">
+                    <span>Organizadores</span>
+                    <strong>${stats.organizer}</strong>
+                </article>
+            `;
+
+            if (!manageableUsers.length) {
+                usersRoot.innerHTML = '<div class="empty">No hay admins u organizadores registrados.</div>';
+                return;
+            }
+
+            usersRoot.innerHTML = manageableUsers.map((user) => {
+                const isCurrentUser = state.user && String(state.user.id) === String(user.id);
+                const role = String(user.role || 'user');
+                const roleLabel = role === 'organizer' ? 'Organizador' : role === 'admin' ? 'Admin' : 'Usuario';
+                const roleClass = role === 'organizer' ? 'role-organizer' : role === 'admin' ? 'role-admin' : 'role-user';
+                const canEditRole = role === 'organizer' || role === 'admin';
+                return `
+                    <article class="admin-user-row">
+                        <div>
+                            <h4>${user.name || 'Usuario'}</h4>
+                            <p>${user.email || 'Sin correo'}</p>
+                            <span class="admin-role-badge ${roleClass}">${roleLabel}</span>
+                        </div>
+                        <div class="admin-user-row-actions">
+                            ${isCurrentUser ? '<span class="admin-user-self">Tu cuenta</span>' : `${canEditRole ? `<div class="admin-role-editor"><select data-user-role="${user.id}"><option value="organizer" ${role === 'organizer' ? 'selected' : ''}>Organizador</option><option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option></select><button class="save-role-btn" type="button" data-user-role-save="${user.id}">Guardar rol</button></div>` : ''}<button class="danger-btn" type="button" data-user-delete="${user.id}">Borrar</button>`}
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        async function loadUsers() {
+            if (!isAdmin()) {
+                state.users = [];
+                renderUsers();
+                return;
+            }
+
+            usersRoot.innerHTML = '<div class="loader">Cargando usuarios...</div>';
+            try {
+                const payload = await apiCall('GET', '/auth/users');
+                state.users = Array.isArray(payload.users) ? payload.users : [];
+                renderUsers();
+            } catch (err) {
+                usersRoot.innerHTML = '<div class="empty">No se pudo cargar la lista de usuarios.</div>';
+                notify(err.message, 'err');
+            }
+        }
+
+        async function createUserHandler() {
+            if (!isAdmin()) {
+                return;
+            }
+
+            const name = document.getElementById('adminUserName').value.trim();
+            const email = document.getElementById('adminUserEmail').value.trim();
+            const password = document.getElementById('adminUserPassword').value;
+            const confirmPassword = document.getElementById('adminUserPasswordConfirm').value;
+            const role = document.getElementById('adminUserRole').value;
+            const minLength = getMinPasswordLength(role);
+
+            if (!name || !email || !password || !confirmPassword) {
+                notify('Completa todos los campos para crear el usuario', 'err');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                notify('Las contrasenas no coinciden', 'err');
+                return;
+            }
+
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
+            if (password.length < minLength) {
+                notify(`La contrasena para ${role} debe tener al menos ${minLength} caracteres`, 'err');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/auth/register', { name, email, password, role });
+                notify('Usuario creado correctamente', 'ok');
+                document.getElementById('adminUserName').value = '';
+                document.getElementById('adminUserEmail').value = '';
+                document.getElementById('adminUserPassword').value = '';
+                document.getElementById('adminUserPasswordConfirm').value = '';
+                document.getElementById('adminUserRole').value = 'organizer';
+                await loadUsers();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function deleteUserHandler(userId) {
+            if (!isAdmin() || !userId) {
+                return;
+            }
+
+            const user = state.users.find((item) => String(item.id) === String(userId));
+            if (!user) {
+                notify('No se encontro el usuario seleccionado', 'err');
+                return;
+            }
+
+            const currentRole = String(user.role || '').toLowerCase();
+            if (currentRole !== 'organizer' && currentRole !== 'admin') {
+                notify('Desde esta vista solo puedes gestionar organizer o admin', 'err');
+                return;
+            }
+
+            const approved = window.confirm(`Se eliminara a ${user?.name || 'este usuario'}. Deseas continuar?`);
+            if (!approved) {
+                return;
+            }
+
+            try {
+                await apiCall('DELETE', `/auth/users/${encodeURIComponent(userId)}`);
+                notify('Usuario eliminado correctamente', 'ok');
+                await loadUsers();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function changeUserRoleHandler(userId) {
+            if (!isAdmin() || !userId) {
+                return;
+            }
+
+            const user = state.users.find((item) => String(item.id) === String(userId));
+            if (!user) {
+                notify('No se encontro el usuario seleccionado', 'err');
+                return;
+            }
+
+            const currentRole = String(user.role || '').toLowerCase();
+            if (currentRole !== 'organizer' && currentRole !== 'admin') {
+                notify('Desde esta vista solo puedes gestionar organizer o admin', 'err');
+                return;
+            }
+
+            const roleSelect = usersRoot.querySelector(`[data-user-role="${String(userId)}"]`);
+            const roleInput = String(roleSelect?.value || '').trim().toLowerCase();
+
+            const allowedRoles = ['organizer', 'admin'];
+            if (!allowedRoles.includes(roleInput)) {
+                notify('Solo puedes asignar organizer o admin', 'err');
+                return;
+            }
+
+            if (String(user.role || '').toLowerCase() === roleInput) {
+                notify('Ese usuario ya tiene ese rol', 'info');
+                return;
+            }
+
+            try {
+                await apiCall('PATCH', `/auth/users/${encodeURIComponent(userId)}`, {
+                    role: roleInput,
+                });
+                notify('Rol actualizado correctamente', 'ok');
+                await loadUsers();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function restoreSession() {
+            if (!state.token) {
+                window.location.replace('/');
+                return;
+            }
+
+            const storedUser = localStorage.getItem('tm_user');
+            if (storedUser) {
+                try {
+                    state.user = JSON.parse(storedUser);
+                } catch (err) {
+                    state.user = null;
+                }
+            }
+
+            if (!state.user) {
+                state.user = parseUserFromToken(state.token);
+            }
+
+            try {
+                const myTickets = await apiCall('GET', '/tickets/my-tickets');
+                if (!Array.isArray(myTickets)) {
+                    throw new Error('Sesion invalida');
+                }
+            } catch (err) {
+                localStorage.removeItem('tm_token');
+                localStorage.removeItem('tm_user');
+                state.token = null;
+                state.user = null;
+                window.location.replace('/');
+                return;
+            }
+
+            if (!isAdmin()) {
+                window.location.replace(getRoleRoute(state.user?.role));
+                return;
+            }
+
+            setTopbarUi();
+        }
+
+        async function logoutHandler() {
+            localStorage.removeItem('tm_token');
+            localStorage.removeItem('tm_user');
+            state.token = null;
+            state.user = null;
+            state.users = [];
+            closeSessionMenu();
+            window.location.replace('/');
+        }
+
+        sessionMenuButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSessionMenu();
+        });
+
+        sessionMenu.addEventListener('click', async (event) => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+
+            if (button.id === 'settingsMenuButton') {
+                closeSessionMenu();
+                window.location.href = '/settings.html';
+                return;
+            }
+
+            if (button.id === 'logoutMenuButton') {
+                closeSessionMenu();
+                await logoutHandler();
+            }
+        });
+
+        loginButton.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+
+        registerButton.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+
+        backToAdminButton.addEventListener('click', () => {
+            closeSessionMenu();
+            window.location.href = '/admin.html';
+        });
+
+        refreshUsersButton.addEventListener('click', loadUsers);
+        createUserButton.addEventListener('click', createUserHandler);
+
+        usersRoot.addEventListener('click', (event) => {
+            const roleSaveButton = event.target.closest('[data-user-role-save]');
+            if (roleSaveButton) {
+                changeUserRoleHandler(roleSaveButton.dataset.userRoleSave);
+                return;
+            }
+
+            const deleteButton = event.target.closest('[data-user-delete]');
+            if (!deleteButton) {
+                return;
+            }
+
+            deleteUserHandler(deleteButton.dataset.userDelete);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!sessionMenu.contains(event.target) && event.target !== sessionMenuButton) {
+                closeSessionMenu();
+            }
+        });
+
+        (async function init() {
+            await restoreSession();
+            await loadUsers();
+            notify('Gestion de usuarios lista', 'info');
+        })();
+    </script>
+</body>
+</html>

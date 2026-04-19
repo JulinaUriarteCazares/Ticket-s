@@ -16,6 +16,7 @@
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
             <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion"></div>
             <div class="topbar-actions">
+                <button id="manageUsersTopButton" class="auth-mini secondary hidden" type="button">Administrar usuarios</button>
                 <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
                 <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
             </div>
@@ -155,6 +156,7 @@
         const registerModal = document.getElementById('registerModal');
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
+        const manageUsersTopButton = document.getElementById('manageUsersTopButton');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
         const toastRoot = document.getElementById('toastRoot');
@@ -299,6 +301,7 @@
                 sessionMenuButton.classList.remove('hidden');
                 loginButton.classList.add('hidden');
                 registerButton.classList.add('hidden');
+                manageUsersTopButton.classList.toggle('hidden', !isAdmin());
                 renderSessionMenu();
                 if (state.user.role === 'organizer' || state.user.role === 'admin') {
                     document.getElementById('heroBanner').classList.add('hero-organizer');
@@ -315,6 +318,7 @@
                 sessionMenuButton.classList.add('hidden');
                 loginButton.classList.remove('hidden');
                 registerButton.classList.remove('hidden');
+                manageUsersTopButton.classList.add('hidden');
                 sessionMenu.innerHTML = '';
                 closeSessionMenu();
                 document.getElementById('heroBanner').classList.toggle('hero-organizer', defaultHero.organizer);
@@ -323,7 +327,7 @@
             }
 
             adminInsightsSection.classList.toggle('hidden', !isAdmin());
-            adminUsersSection.classList.toggle('hidden', !isAdmin());
+            adminUsersSection.classList.add('hidden');
         }
 
         async function apiCall(method, url, body = null) {
@@ -514,7 +518,7 @@
                             <p>${user.email || 'Sin correo'}<br>Rol: ${user.role || 'user'}</p>
                         </div>
                         <div class="admin-user-row-actions">
-                            ${isCurrentUser ? '<span class="admin-user-self">Tu cuenta</span>' : `<button class="danger-btn" type="button" data-user-delete="${user.id}">Borrar</button>`}
+                            ${isCurrentUser ? '<span class="admin-user-self">Tu cuenta</span>' : `<button class="refresh-btn secondary-btn" type="button" data-user-edit="${user.id}">Modificar</button><button class="danger-btn" type="button" data-user-delete="${user.id}">Borrar</button>`}
                         </div>
                     </article>
                 `;
@@ -635,6 +639,56 @@
             try {
                 await apiCall('DELETE', `/auth/users/${encodeURIComponent(userId)}`);
                 notify('Usuario eliminado correctamente', 'ok');
+                await loadUsers();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function editUserHandler(userId) {
+            if (!isAdmin() || !userId) {
+                return;
+            }
+
+            const user = state.users.find((item) => String(item.id) === String(userId));
+            if (!user) {
+                notify('No se encontro el usuario seleccionado', 'err');
+                return;
+            }
+
+            const nextName = String(window.prompt('Nuevo nombre del usuario', user.name || '') || '').trim();
+            if (!nextName) {
+                return;
+            }
+
+            const nextEmail = String(window.prompt('Nuevo correo del usuario', user.email || '') || '').trim();
+            if (!nextEmail) {
+                return;
+            }
+
+            const roleInput = String(window.prompt('Nuevo rol (user, organizer, admin)', user.role || 'user') || '').trim().toLowerCase();
+            if (!roleInput) {
+                return;
+            }
+
+            const allowedRoles = ['user', 'organizer', 'admin'];
+            if (!allowedRoles.includes(roleInput)) {
+                notify('Rol invalido. Usa: user, organizer o admin', 'err');
+                return;
+            }
+
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+                notify('Ingresa un correo electronico valido', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('PATCH', `/auth/users/${encodeURIComponent(userId)}`, {
+                    name: nextName,
+                    email: nextEmail,
+                    role: roleInput,
+                });
+                notify('Usuario actualizado correctamente', 'ok');
                 await loadUsers();
             } catch (err) {
                 notify(err.message, 'err');
@@ -807,6 +861,10 @@
         document.getElementById('doRegister').addEventListener('click', registerHandler);
         refreshUsersButton.addEventListener('click', loadUsers);
         createUserButton.addEventListener('click', createUserHandler);
+        manageUsersTopButton.addEventListener('click', () => {
+            closeSessionMenu();
+            window.location.href = '/admin-users.html';
+        });
 
         loginModal.addEventListener('click', (event) => {
             if (event.target === loginModal) {
@@ -836,6 +894,12 @@
         });
 
         usersRoot.addEventListener('click', (event) => {
+            const editButton = event.target.closest('[data-user-edit]');
+            if (editButton) {
+                editUserHandler(editButton.dataset.userEdit);
+                return;
+            }
+
             const button = event.target.closest('[data-user-delete]');
             if (!button) {
                 return;
@@ -847,7 +911,6 @@
         (async function init() {
             await restoreSession();
             await loadAdminInsights();
-            await loadUsers();
             notify('Panel admin listo', 'info');
         })();
     </script>

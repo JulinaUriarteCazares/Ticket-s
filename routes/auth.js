@@ -88,6 +88,10 @@ router.post('/register', async (req, res) => {
     return res.status(403).json({ error: 'Solo un admin puede registrar organizadores o administradores' });
   }
 
+  if (canCreatePrivilegedUser && !['organizer', 'admin'].includes(requestedRole)) {
+    return res.status(400).json({ error: 'Desde este panel solo puedes crear organizer o admin' });
+  }
+
   const finalRole = canCreatePrivilegedUser ? requestedRole : 'user';
   const minPasswordLength = getMinPasswordLengthByRole(finalRole);
 
@@ -347,6 +351,54 @@ router.delete('/users/:id', auth, async (req, res) => {
     return res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+router.patch('/users/:id', auth, async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Solo un admin puede modificar usuarios' });
+  }
+
+  const targetUserId = String(req.params.id || '').trim();
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'Debes indicar un usuario valido' });
+  }
+
+  if (String(req.user?.id || '') === targetUserId) {
+    return res.status(400).json({ error: 'No puedes modificar tu propia cuenta desde este panel' });
+  }
+
+  const allowedRoles = ['organizer', 'admin'];
+  const nextRole = String(req.body?.role || '').trim().toLowerCase();
+
+  if (!nextRole) {
+    return res.status(400).json({ error: 'El rol es obligatorio' });
+  }
+
+  if (!allowedRoles.includes(nextRole)) {
+    return res.status(400).json({ error: 'Solo puedes asignar organizer o admin' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET role = $2
+       WHERE id = $1
+       RETURNING id, name, email, role`,
+      [targetUserId, nextRole]
+    );
+
+    const updatedUser = result.rows[0];
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    return res.json({
+      message: 'Usuario actualizado correctamente',
+      user: updatedUser,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
