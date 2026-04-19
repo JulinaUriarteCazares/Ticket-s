@@ -79,37 +79,64 @@ function rowLabelFromIndex(index) {
   return label;
 }
 
-function buildSectionSeatLayout(totalSeats, occupiedLabels = new Set()) {
+function normalizeSeatZoneType(typeName) {
+  const normalized = String(typeName || '').trim().toLowerCase();
+  if (normalized.includes('platino') || normalized.includes('platinum')) {
+    return { code: 'PL', label: 'Platino', rank: 1 };
+  }
+  if (normalized.includes('vip')) {
+    return { code: 'VP', label: 'VIP', rank: 2 };
+  }
+  return { code: 'NM', label: 'Numerado', rank: 3 };
+}
+
+function buildTierSeatLayout(totalSeats, typeName, occupiedLabels = new Set()) {
   const safeTotal = Math.max(Number(totalSeats || 0), 0);
-  const sectionLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const rowsPerSection = 30;
-  const colsPerRow = 10;
-  const seatsPerSection = rowsPerSection * colsPerRow;
+  const zone = normalizeSeatZoneType(typeName);
   const seats = [];
 
-  for (let index = 0; index < safeTotal; index += 1) {
-    const sectionIndex = Math.floor(index / seatsPerSection);
-    const sectionLabel = sectionLabels[sectionIndex] || `S${sectionIndex + 1}`;
-    const indexInSection = index % seatsPerSection;
-    const rowNumber = Math.floor(indexInSection / colsPerRow) + 1;
-    const colNumber = (indexInSection % colsPerRow) + 1;
-    const seatLabel = `${sectionLabel}-${String(rowNumber).padStart(2, '0')}-${String(colNumber).padStart(2, '0')}`;
-    const status = occupiedLabels.has(seatLabel) ? 'sold' : 'available';
+  if (!safeTotal) {
+    return seats;
+  }
 
-    seats.push({
-      seat_label: seatLabel,
-      row_label: `${sectionLabel}-${String(rowNumber).padStart(2, '0')}`,
-      column_label: String(colNumber),
-      section_label: sectionLabel,
-      status,
-    });
+  // Crece primero en ancho (hacia afuera) y despues en filas.
+  const preferredRows = 12;
+  const minCols = 20;
+  const maxCols = 48;
+  const colsPerRow = Math.min(maxCols, Math.max(minCols, Math.ceil(safeTotal / preferredRows)));
+  const totalRows = Math.ceil(safeTotal / colsPerRow);
+  let created = 0;
+
+  for (let row = 1; row <= totalRows; row += 1) {
+    for (let col = 1; col <= colsPerRow; col += 1) {
+      if (created >= safeTotal) {
+        break;
+      }
+
+      const seatLabel = `${zone.code}-${String(row).padStart(2, '0')}-${String(col).padStart(2, '0')}`;
+      const status = occupiedLabels.has(seatLabel) ? 'sold' : 'available';
+
+      seats.push({
+        seat_label: seatLabel,
+        row_label: `${zone.code}-${String(row).padStart(2, '0')}`,
+        column_label: String(col),
+        section_label: zone.code,
+        status,
+      });
+
+      created += 1;
+    }
   }
 
   return seats;
 }
 
-async function ensureDefaultSeatsForTicketType(client, ticketTypeId, capacity) {
-  const targetSeats = Math.max(Number(capacity || 0), 4500);
+async function ensureDefaultSeatsForTicketType(client, ticketTypeId, capacity, typeName) {
+  const targetSeats = Math.max(Number(capacity || 0), 0);
+  if (!targetSeats) {
+    return 0;
+  }
+
   const countResult = await client.query(
     'SELECT COUNT(*)::int AS total FROM seats WHERE ticket_type_id = $1',
     [ticketTypeId]
@@ -119,7 +146,7 @@ async function ensureDefaultSeatsForTicketType(client, ticketTypeId, capacity) {
     return existing;
   }
 
-  const generated = buildSectionSeatLayout(targetSeats);
+  const generated = buildTierSeatLayout(targetSeats, typeName);
   const seatLabels = generated.map((seat) => seat.seat_label);
   const rowLabels = generated.map((seat) => seat.row_label);
   const colLabels = generated.map((seat) => seat.column_label);
@@ -714,7 +741,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
     let seats = [];
 
     if (supportsSeats) {
-      await ensureDefaultSeatsForTicketType(client, ticketTypeId, ticketType.capacity);
+      await ensureDefaultSeatsForTicketType(client, ticketTypeId, ticketType.capacity, ticketType.type_name);
 
       const seatsResult = await client.query(
         `SELECT seat_label, row_label, column_label, status
@@ -726,7 +753,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
 
       seats = seatsResult.rows.map((seat) => ({
         ...seat,
-        section_label: String(seat.seat_label || '').split('-')[0] || 'S1',
+        section_label: String(seat.row_label || '').split('-')[0] || String(seat.seat_label || '').split('-')[0] || 'NM',
       }));
     }
 
@@ -738,8 +765,10 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         [ticketTypeId]
       );
       const occupied = new Set(soldResult.rows.map((row) => String(row.seat_number || '').trim()).filter(Boolean));
-      seats = buildSectionSeatLayout(Math.max(Number(ticketType.capacity || 0), 4500), occupied);
+      seats = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupied);
     }
+
+    const seatZone = normalizeSeatZoneType(ticketType.type_name);
 
     res.json({
       ticketType: {
@@ -747,6 +776,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         type_name: ticketType.type_name,
         capacity: Number(ticketType.capacity || 0),
         sold: Number(ticketType.sold || 0),
+        seat_zone: seatZone,
       },
       event: {
         id: ticketType.event_id,
@@ -821,7 +851,7 @@ router.post('/purchase-with-seats', auth, async (req, res) => {
 
     let seatsToSell = [];
     if (supportsSeats) {
-      await ensureDefaultSeatsForTicketType(client, ticket_type_id, ticketType.capacity);
+      await ensureDefaultSeatsForTicketType(client, ticket_type_id, ticketType.capacity, ticketType.type_name);
 
       const seatsResult = await client.query(
         `SELECT id, seat_label, status

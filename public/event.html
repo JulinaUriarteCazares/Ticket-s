@@ -20,6 +20,7 @@
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
             <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
                 <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
                 <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
             </div>
@@ -266,6 +267,7 @@
         const adminEventReportRoot = document.getElementById('adminEventReportRoot');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
+        const boletosMenuButton = document.getElementById('boletosMenuButton');
         const settingsMenuButton = document.getElementById('settingsMenuButton');
         const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
@@ -1324,6 +1326,10 @@
         sessionMenuButton.addEventListener('click', (event) => {
             event.stopPropagation();
             toggleSessionMenu();
+        });
+        boletosMenuButton.addEventListener('click', () => {
+            closeSessionMenu();
+            window.location.href = '/';
         });
         settingsMenuButton.addEventListener('click', () => {
             closeSessionMenu();

@@ -16,6 +16,7 @@
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
             <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="boletosMenuButton" class="session-menu-item" type="button" role="menuitem">Boletos</button>
                 <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
                 <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
             </div>
@@ -68,10 +69,6 @@
                 </div>
             </div>
             <div id="cartItems" class="cart-list"></div>
-            <div class="purchase-cart-storage">
-                <p id="cartStorageStatus" class="ticket-summary">Tu carrito se guarda automaticamente para este evento.</p>
-                <button id="clearSavedCart" class="image-btn" type="button">Borrar carrito guardado</button>
-            </div>
             <div class="cart-footer">
                 <strong id="cartTotal">Total: $0.00</strong>
                 <button id="checkoutCart" class="buy-btn" type="button">Comprar</button>
@@ -93,6 +90,7 @@
                     <span><i class="seat-dot seat-dot-occupied"></i>Ocupado</span>
                 </div>
                 <div class="seat-screen">Pantalla | Sala</div>
+                <div id="seatTypeBands" class="seat-type-bands"></div>
                 <div id="seatPickerGrid" class="seat-picker-grid"></div>
                 <div class="seat-picker-footer">
                     <strong id="seatPickerCount">0 seleccionados</strong>
@@ -158,6 +156,7 @@
         const checkoutCartButton = document.getElementById('checkoutCart');
         const seatPickerModal = document.getElementById('seatPickerModal');
         const seatPickerMeta = document.getElementById('seatPickerMeta');
+        const seatTypeBands = document.getElementById('seatTypeBands');
         const seatPickerGrid = document.getElementById('seatPickerGrid');
         const seatPickerCount = document.getElementById('seatPickerCount');
         const seatPickerPrev = document.getElementById('seatPickerPrev');
@@ -169,10 +168,9 @@
         const purchaseTicketsWrap = document.getElementById('purchaseTicketsWrap');
         const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
         const downloadAllTicketsButton = document.getElementById('downloadAllTickets');
-        const cartStorageStatus = document.getElementById('cartStorageStatus');
-        const cartStorageWrap = document.querySelector('.purchase-cart-storage');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
+        const boletosMenuButton = document.getElementById('boletosMenuButton');
         const settingsMenuButton = document.getElementById('settingsMenuButton');
         const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
@@ -360,20 +358,7 @@
         }
 
         function updateCartStorageStatus() {
-            if (!cartStorageStatus || !cartStorageWrap) {
-                return;
-            }
-
-            if (!state.cart.length) {
-                cartStorageWrap.classList.add('hidden');
-                cartStorageStatus.textContent = '';
-                return;
-            }
-
-            cartStorageWrap.classList.remove('hidden');
-            const itemCount = state.cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-            const eventCount = new Set(state.cart.map((item) => String(item.eventId))).size;
-            cartStorageStatus.textContent = `Carrito guardado automaticamente: ${itemCount} boleto(s) en ${eventCount} evento(s), listos para retomar.`;
+            // Guardado automatico silencioso: sin mensaje visible.
         }
 
         function saveCartToStorage() {
@@ -409,30 +394,6 @@
             }
 
             updateCartStorageStatus();
-        }
-
-        function clearSavedCart() {
-            try {
-                const userPrefix = getCartPrefixByUserId(state.user?.id || null);
-                const guestPrefix = getCartPrefixByUserId(null);
-                for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-                    const key = localStorage.key(index);
-                    if (!key) {
-                        continue;
-                    }
-                    if (key.startsWith(userPrefix) || (state.user?.id && key.startsWith(guestPrefix))) {
-                        localStorage.removeItem(key);
-                    }
-                }
-            } catch (err) {
-                console.error('No se pudo limpiar el carrito guardado:', err);
-            }
-
-            state.cart = [];
-            renderCheckoutRows();
-            renderCart();
-            updateCartStorageStatus();
-            notify('Carrito guardado eliminado', 'ok');
         }
 
         function loadCartFromStorage() {
@@ -1108,6 +1069,53 @@
             return !(normalized === 'general/normal' || normalized === 'general' || normalized === 'normal');
         }
 
+        function getSeatZoneMeta(typeName) {
+            const normalized = String(typeName || '').trim().toLowerCase();
+            if (normalized.includes('platino') || normalized.includes('platinum')) {
+                return {
+                    key: 'platino',
+                    label: 'Platino',
+                    code: 'PL',
+                    proximity: 'Zona mas cercana al escenario',
+                };
+            }
+
+            if (normalized.includes('vip')) {
+                return {
+                    key: 'vip',
+                    label: 'VIP',
+                    code: 'VP',
+                    proximity: 'Zona intermedia',
+                };
+            }
+
+            return {
+                key: 'numerado',
+                label: 'Numerado',
+                code: 'NM',
+                proximity: 'Zona posterior',
+            };
+        }
+
+        function renderSeatTypeBands(activeTypeName) {
+            if (!seatTypeBands) {
+                return;
+            }
+
+            const active = getSeatZoneMeta(activeTypeName);
+            const order = [
+                { key: 'platino', label: 'Platino', hint: 'Mas cerca del escenario' },
+                { key: 'vip', label: 'VIP', hint: 'Zona intermedia' },
+                { key: 'numerado', label: 'Numerado', hint: 'Mas lejos del escenario' },
+            ];
+
+            seatTypeBands.innerHTML = order.map((zone) => {
+                const isActive = zone.key === active.key;
+                const classes = ['seat-type-band', `is-${zone.key}`, isActive ? 'is-active' : ''].filter(Boolean).join(' ');
+                return `<div class="${classes}"><strong>${zone.label}</strong><span>${zone.hint}</span></div>`;
+            }).join('');
+        }
+
         function getSeatWizardCurrentItem() {
             return state.seatWizard.items[state.seatWizard.index] || null;
         }
@@ -1145,6 +1153,7 @@
             const key = getSeatWizardItemKey(item);
             const selectedSet = new Set(state.seatWizard.selectedByType[key] || []);
             const seats = state.seatWizard.seatsByType[key] || [];
+            const zoneMeta = getSeatZoneMeta(item.typeName);
 
             if (!seats.length) {
                 seatPickerGrid.innerHTML = '<div class="empty">No hay asientos configurados para este boleto.</div>';
@@ -1152,20 +1161,19 @@
                 return;
             }
 
-            const sectionMap = new Map();
+            const rowMap = new Map();
             seats.forEach((seat) => {
-                const sectionLabel = String(seat.section_label || '').trim().toUpperCase() || String(seat.seat_label || '').split('-')[0] || 'S1';
-                if (!sectionMap.has(sectionLabel)) {
-                    sectionMap.set(sectionLabel, []);
+                const rowLabel = String(seat.row_label || '').trim().toUpperCase() || String(seat.seat_label || '').split('-').slice(0, 2).join('-') || `${zoneMeta.code}-01`;
+                if (!rowMap.has(rowLabel)) {
+                    rowMap.set(rowLabel, []);
                 }
-                sectionMap.get(sectionLabel).push(seat);
+                rowMap.get(rowLabel).push(seat);
             });
 
-            const sectionLabels = Array.from(sectionMap.keys()).sort((a, b) => a.localeCompare(b));
-
-            seatPickerGrid.innerHTML = sectionLabels.map((sectionLabel) => {
-                const seatsInSection = sectionMap.get(sectionLabel) || [];
-                const seatButtons = seatsInSection.map((seat) => {
+            const rowLabels = Array.from(rowMap.keys()).sort((a, b) => a.localeCompare(b));
+            const rowsHtml = rowLabels.map((rowLabel) => {
+                const seatsInRow = (rowMap.get(rowLabel) || []).sort((a, b) => Number(a.column_label || 0) - Number(b.column_label || 0));
+                const seatButtons = seatsInRow.map((seat) => {
                     const label = String(seat.seat_label || '').toUpperCase();
                     const status = String(seat.status || 'available').toLowerCase();
                     const occupied = status !== 'available';
@@ -1180,12 +1188,22 @@
                 }).join('');
 
                 return `
-                    <section class="seat-section-card">
-                        <h3>SECCION ${sectionLabel}</h3>
-                        <div class="seat-section-grid">${seatButtons}</div>
-                    </section>
+                    <div class="seat-row-wrap">
+                        <span class="seat-row-label">${rowLabel}</span>
+                        <div class="seat-row-grid">${seatButtons}</div>
+                    </div>
                 `;
             }).join('');
+
+            seatPickerGrid.innerHTML = `
+                <section class="seat-zone-card zone-${zoneMeta.key}">
+                    <header class="seat-zone-head">
+                        <h3>${zoneMeta.label}</h3>
+                        <p>${zoneMeta.proximity}</p>
+                    </header>
+                    <div class="seat-zone-rows">${rowsHtml}</div>
+                </section>
+            `;
 
             updateSeatWizardCounter();
         }
@@ -1203,7 +1221,9 @@
             }
 
             const totalSeats = (state.seatWizard.seatsByType[key] || []).length;
-            seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${item.typeName} · Elige ${item.quantity} asiento(s) de ${totalSeats} asientos`;
+            const zone = getSeatZoneMeta(item.typeName);
+            seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${zone.label} · Elige ${item.quantity} asiento(s) de ${totalSeats} asientos`;
+            renderSeatTypeBands(item.typeName);
             seatPickerPrev.disabled = state.seatWizard.index === 0;
             seatPickerNext.textContent = state.seatWizard.index === state.seatWizard.items.length - 1
                 ? 'Confirmar compra'
@@ -1380,7 +1400,10 @@
                 const data = await apiCall('POST', '/auth/login', { email, password });
                 localStorage.setItem('tm_token', data.token);
                 state.token = data.token;
-                state.user = parseUserFromToken(data.token);
+                state.user = data.user || parseUserFromToken(data.token);
+                if (state.user) {
+                    localStorage.setItem('tm_user', JSON.stringify(state.user));
+                }
                 loadCartFromStorage();
                 setTopbarUi();
                 notify('Sesion iniciada', 'ok');
@@ -1443,7 +1466,17 @@
             }
 
             state.eventId = eventId;
-            state.user = parseUserFromToken(state.token);
+            const storedUser = localStorage.getItem('tm_user');
+            if (storedUser) {
+                try {
+                    state.user = JSON.parse(storedUser);
+                } catch (err) {
+                    state.user = null;
+                }
+            }
+            if (!state.user) {
+                state.user = parseUserFromToken(state.token);
+            }
             setTopbarUi();
             if (!state.token) {
                 openAuthModal();
@@ -1460,6 +1493,10 @@
             sessionMenuButton.addEventListener('click', (event) => {
                 event.stopPropagation();
                 toggleSessionMenu();
+            });
+            boletosMenuButton.addEventListener('click', () => {
+                closeSessionMenu();
+                window.location.href = '/';
             });
             settingsMenuButton.addEventListener('click', () => {
                 closeSessionMenu();
@@ -1507,7 +1544,6 @@
                 renderCheckoutRows();
                 renderCart();
             });
-            document.getElementById('clearSavedCart').addEventListener('click', clearSavedCart);
             checkoutCartButton.addEventListener('click', checkoutCart);
             closeSeatPicker.addEventListener('click', closeSeatWizard);
             seatPickerPrev.addEventListener('click', () => {

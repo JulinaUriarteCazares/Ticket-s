@@ -107,44 +107,132 @@
 	letter-spacing: 0.02em;
 }
 
-.seat-picker-grid {
+.seat-type-bands {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-}
-
-.seat-section-card {
-	border: 1px solid #d5dcee;
-	border-radius: 12px;
-	background: #fff;
-	padding: 10px;
-	display: grid;
 	gap: 8px;
 }
 
-.seat-section-card h3 {
+.seat-type-band {
+	border: 2px solid #d4d9e6;
+	border-radius: 10px;
+	background: #fff;
+	padding: 8px 10px;
+	display: grid;
+	gap: 2px;
+	opacity: 0.6;
+	transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.seat-type-band strong {
+	font-size: 14px;
+	line-height: 1.1;
+}
+
+.seat-type-band span {
+	font-size: 11px;
+	color: #43506b;
+}
+
+.seat-type-band.is-active {
+	opacity: 1;
+	transform: translateY(-1px);
+}
+
+.seat-type-band.is-platino {
+	border-color: #3c7ce9;
+	background: #edf4ff;
+}
+
+.seat-type-band.is-vip {
+	border-color: #f2b14c;
+	background: #fff6e7;
+}
+
+.seat-type-band.is-numerado {
+	border-color: #70c36e;
+	background: #eff9ec;
+}
+
+.seat-picker-grid {
+	display: block;
+}
+
+.seat-zone-card {
+	border: 1px solid #d5dcee;
+	border-radius: 12px;
+	background: #fff;
+	padding: 12px;
+	display: grid;
+	gap: 10px;
+}
+
+.seat-zone-card.zone-platino {
+	border-color: #3c7ce9;
+	background: #f4f8ff;
+}
+
+.seat-zone-card.zone-vip {
+	border-color: #f2b14c;
+	background: #fff7ea;
+}
+
+.seat-zone-card.zone-numerado {
+	border-color: #70c36e;
+	background: #f1faef;
+}
+
+.seat-zone-head h3 {
 	margin: 0;
-	text-align: center;
-	font-size: 20px;
+	font-size: 24px;
 	font-weight: 900;
-	color: #102f67;
+	color: #142f61;
 	letter-spacing: 0.02em;
 }
 
-.seat-section-grid {
+.seat-zone-head p {
+	margin: 4px 0 0;
+	font-weight: 700;
+	color: #27457c;
+}
+
+.seat-zone-rows {
 	display: grid;
-	grid-template-columns: repeat(10, minmax(0, 1fr));
+	gap: 6px;
+	overflow-x: auto;
+	padding-bottom: 6px;
+}
+
+.seat-row-wrap {
+	display: grid;
+	grid-template-columns: 70px minmax(0, 1fr);
+	gap: 8px;
+	align-items: center;
+}
+
+.seat-row-label {
+	font-size: 12px;
+	font-weight: 800;
+	color: #243f74;
+	text-transform: uppercase;
+	text-align: right;
+}
+
+.seat-row-grid {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(34px, 34px);
 	gap: 6px;
 }
 
 .seat-btn {
 	width: 100%;
 	border: 2px solid #7d8daa;
-	border-radius: 999px;
+	border-radius: 8px;
 	background: #fff;
 	color: #12316a;
-	padding: 6px 4px;
-	font-size: 11px;
+	padding: 6px 2px;
+	font-size: 9px;
 	font-weight: 800;
 	line-height: 1;
 	cursor: pointer;
@@ -234,7 +322,20 @@
 	}
 
 	.seat-picker-grid {
+		display: block;
+	}
+
+	.seat-type-bands {
 		grid-template-columns: 1fr;
+	}
+
+	.seat-row-wrap {
+		grid-template-columns: 1fr;
+		gap: 6px;
+	}
+
+	.seat-row-label {
+		text-align: left;
 	}
 
 	.seat-picker-actions {
