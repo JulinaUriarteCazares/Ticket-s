@@ -238,6 +238,40 @@ main {
     gap: 16px;
 }
 
+.admin-event-report {
+    display: grid;
+    gap: 12px;
+}
+
+.admin-event-report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+}
+
+.admin-statement {
+    margin-bottom: 14px;
+}
+
+.admin-statement-card {
+    border: 1px solid #d6cab3;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fffaf0 0%, #fffdf8 100%);
+    box-shadow: 0 10px 22px rgba(17, 19, 24, 0.08);
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.admin-statement-card h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.admin-metric-grid-summary {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .admin-report-card {
     border: 1px solid #ddd4c2;
     border-radius: 14px;

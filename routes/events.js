@@ -160,6 +160,101 @@ function canViewRestrictedEvent(user, event) {
   return user.role === 'admin' || user.role === 'organizer' || String(user.id) === String(event.organizer_id);
 }
 
+async function buildEventAdminReport(eventId) {
+  const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [eventId]);
+  if (eventResult.rows.length === 0) {
+    return null;
+  }
+
+  const event = eventResult.rows[0];
+  const ticketTypesResult = await pool.query('SELECT * FROM ticket_types WHERE event_id = $1', [eventId]);
+  const totalsResult = await pool.query(
+    `SELECT
+      COALESCE(SUM(tt.sold), 0) AS total_tickets_sold,
+      COALESCE(SUM(tt.capacity - tt.sold), 0) AS tickets_unsold,
+      COALESCE(SUM(tt.sold * tt.price), 0) AS total_income,
+      COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0) * tt.price), 0) AS unsold_potential,
+      COALESCE(SUM(tt.capacity), 0) AS total_capacity
+     FROM ticket_types tt
+     WHERE tt.event_id = $1`,
+    [eventId]
+  );
+
+  const totals = totalsResult.rows[0] || {};
+  return {
+    event,
+    ticket_types: ticketTypesResult.rows,
+    total_tickets_sold: Number(totals.total_tickets_sold || 0),
+    tickets_unsold: Number(totals.tickets_unsold || 0),
+    total_income: Number(totals.total_income || 0),
+    unsold_potential: Number(totals.unsold_potential || 0),
+    total_capacity: Number(totals.total_capacity || 0),
+  };
+}
+
+router.get('/admin/overview', auth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const eventRows = await pool.query('SELECT * FROM events ORDER BY event_date DESC, event_time DESC');
+    const reports = [];
+    for (const event of eventRows.rows) {
+      const report = await buildEventAdminReport(event.id);
+      if (report) {
+        reports.push({
+          id: event.id,
+          name: event.name,
+          location: event.location,
+          event_date: event.event_date,
+          event_time: event.event_time,
+          active: event.active,
+          artist_fee: Number(event.artist_fee || 0),
+          tickets_sold: report.total_tickets_sold,
+          tickets_unsold: report.tickets_unsold,
+          total_income: report.total_income,
+          unsold_potential: report.unsold_potential,
+        });
+      }
+    }
+
+    const summary = reports.reduce((acc, event) => {
+      acc.ticketsSold += Number(event.tickets_sold || 0);
+      acc.totalIncome += Number(event.total_income || 0);
+      acc.artistPaid += Number(event.artist_fee || 0);
+      return acc;
+    }, {
+      ticketsSold: 0,
+      totalIncome: 0,
+      artistPaid: 0,
+    });
+
+    res.json({ summary: { ...summary, balance: summary.totalIncome - summary.artistPaid }, reports });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/admin-report', auth, async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const report = await buildEventAdminReport(id);
+    if (!report) {
+      return res.status(404).json({ error: 'Evento no encontrado' });
+    }
+
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function getTicketCapacitySum(eventId, excludeTicketTypeId = null) {
   if (excludeTicketTypeId) {
     const result = await pool.query(

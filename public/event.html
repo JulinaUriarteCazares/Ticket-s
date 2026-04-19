@@ -53,6 +53,16 @@
                     </div>
                 </section>
 
+                <section id="adminEventReportSection" class="panel hidden">
+                    <div class="section-title-row">
+                        <div>
+                            <h2>Informe del evento</h2>
+                            <p class="ticket-summary">Resumen financiero para administrador.</p>
+                        </div>
+                    </div>
+                    <div id="adminEventReportRoot" class="admin-event-report"></div>
+                </section>
+
                 <section id="ticketCheckoutSection" class="panel ticket-checkout hidden">
                     <div class="section-title-row">
                         <div>
@@ -232,6 +242,8 @@
         const eventBottomCtaWrap = document.getElementById('eventBottomCtaWrap');
         const deactivateEventInlineBtn = document.getElementById('deactivateEventInline');
         const organizerEventStatus = document.getElementById('organizerEventStatus');
+        const adminEventReportSection = document.getElementById('adminEventReportSection');
+        const adminEventReportRoot = document.getElementById('adminEventReportRoot');
         const eventFieldIds = [
             'editName',
             'editLocation',
@@ -280,6 +292,10 @@
 
         function isViewer(event) {
             return !canEditEvent(event);
+        }
+
+        function isAdmin() {
+            return state.user && state.user.role === 'admin';
         }
 
         function canUseCheckoutAsViewer() {
@@ -348,6 +364,7 @@
             const canBuy = isRegularUser();
             const viewer = isViewer(event);
             const checkoutViewer = viewer && canUseCheckoutAsViewer();
+            const adminView = isAdmin();
             const ticketTypes = event.ticketTypes || [];
             const totalTicketCapacity = ticketTypes.reduce((sum, type) => sum + Number(type.capacity || 0), 0);
             const ticketRows = ticketTypes.map((type) => {
@@ -378,6 +395,8 @@
             } else {
                 ticketSummaryCopy.textContent = 'Consulta disponibilidad, precio y boletos vendidos por tipo.';
             }
+
+            adminEventReportSection.classList.toggle('hidden', !adminView);
 
             const cards = visibleRows.map((type) => {
                 return `<article class="ticket-card">
@@ -420,15 +439,39 @@
             imageQuickAction.classList.toggle('hidden', !editable);
             quickEditEvent.classList.toggle('hidden', !editable);
             openTicketCreatorInline.classList.toggle('hidden', !editable);
-            eventBottomCtaWrap.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0);
-            goToCheckout.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0);
-            ticketCheckoutSection.classList.toggle('hidden', !checkoutViewer || !state.checkoutOpen || visibleRows.length === 0);
+            eventBottomCtaWrap.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0 || adminView);
+            goToCheckout.classList.toggle('hidden', !checkoutViewer || visibleRows.length === 0 || adminView);
+            ticketCheckoutSection.classList.toggle('hidden', !checkoutViewer || !state.checkoutOpen || visibleRows.length === 0 || adminView);
             eventCartPanel.classList.toggle('hidden', !canBuy || !state.checkoutOpen);
             if (editable) {
                 fillEditForm(event);
             }
 
             renderEventCart();
+        }
+
+        async function loadAdminEventReport() {
+            if (!isAdmin()) {
+                adminEventReportRoot.innerHTML = '';
+                return;
+            }
+
+            adminEventReportRoot.innerHTML = '<div class="loader">Cargando informe...</div>';
+            try {
+                const report = await apiCall('GET', `/events/${state.eventId}/admin-report`);
+                adminEventReportRoot.innerHTML = `
+                    <div class="admin-event-report-grid">
+                        <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(report.total_tickets_sold || 0)}</strong></div>
+                        <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(report.tickets_unsold || 0)}</strong></div>
+                        <div class="admin-metric-item"><span>Total de ventas</span><strong>$${Number(report.total_income || 0).toFixed(2)}</strong></div>
+                        <div class="admin-metric-item"><span>Tarifa del artista</span><strong>$${Number(report.event?.artist_fee || 0).toFixed(2)}</strong></div>
+                        <div class="admin-metric-item"><span>Potencial no vendido</span><strong>$${Number(report.unsold_potential || 0).toFixed(2)}</strong></div>
+                        <div class="admin-metric-item"><span>Capacidad total</span><strong>${Number(report.total_capacity || 0)}</strong></div>
+                    </div>
+                `;
+            } catch (err) {
+                adminEventReportRoot.innerHTML = '<div class="empty">No se pudo cargar el informe.</div>';
+            }
         }
 
         async function deactivateEventInline() {
@@ -701,6 +744,7 @@
                 const ticketTypes = await apiCall('GET', `/events/${state.eventId}/ticket-types`);
                 state.event = { ...event, ticketTypes };
                 renderEvent();
+                await loadAdminEventReport();
             } catch (err) {
                 if (String(err.message || '').toLowerCase().includes('evento no encontrado')) {
                     document.querySelector('main').innerHTML = '<section class="panel"><h1 class="title">Evento no disponible</h1><p class="meta">Este evento ya paso o no existe.</p><div class="actions"><button type="button" id="returnHomeExpired">Volver al inicio</button></div></section>';

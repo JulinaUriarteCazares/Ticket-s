@@ -58,6 +58,41 @@ async function getAdminEventsOverviewRows() {
   }
 }
 
+async function getAdminStatementTotals() {
+  const query = `
+    SELECT
+      COALESCE(SUM(tt.sold), 0) AS tickets_sold,
+      COALESCE(SUM(tt.sold * tt.price), 0) AS total_income,
+      COALESCE(SUM(COALESCE(e.artist_fee, 0)), 0) AS artist_paid
+    FROM events e
+    LEFT JOIN ticket_types tt ON tt.event_id = e.id
+  `;
+
+  const result = await pool.query(query);
+  const row = result.rows[0] || {};
+  return {
+    ticketsSold: Number(row.tickets_sold || 0),
+    totalIncome: Number(row.total_income || 0),
+    artistPaid: Number(row.artist_paid || 0),
+  };
+}
+
+router.get('/admin/statement', auth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  try {
+    const summary = await getAdminStatementTotals();
+    res.json({
+      ...summary,
+      balance: summary.totalIncome - summary.artistPaid,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/admin/events-overview', auth, async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'No autorizado' });
@@ -83,18 +118,31 @@ router.get('/event/:eventId', auth, async (req, res) => {
 
     const ticketTypes = await pool.query('SELECT * FROM ticket_types WHERE event_id = $1', [eventId]);
     const sales = await pool.query(
-      `SELECT COUNT(t.id) as sold, SUM(tt.price) as total_income
+      `SELECT COUNT(t.id) as sold, COALESCE(SUM(tt.price), 0) as total_income
        FROM tickets t
        JOIN ticket_types tt ON t.ticket_type_id = tt.id
        WHERE tt.event_id = $1 AND t.status = true`,
       [eventId]
     );
 
+    const unsold = await pool.query(
+      `SELECT COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0)), 0) AS tickets_unsold,
+              COALESCE(SUM(GREATEST(tt.capacity - tt.sold, 0) * tt.price), 0) AS unsold_potential,
+              COALESCE(SUM(tt.sold), 0) AS sold_total,
+              COALESCE(SUM(tt.capacity), 0) AS capacity_total
+       FROM ticket_types tt
+       WHERE tt.event_id = $1`,
+      [eventId]
+    );
+
     const report = {
       event: event.rows[0],
       ticket_types: ticketTypes.rows,
-      total_tickets_sold: sales.rows[0].sold || 0,
-      total_income: sales.rows[0].total_income || 0,
+      total_tickets_sold: Number(sales.rows[0].sold || 0),
+      total_income: Number(sales.rows[0].total_income || 0),
+      tickets_unsold: Number(unsold.rows[0].tickets_unsold || 0),
+      unsold_potential: Number(unsold.rows[0].unsold_potential || 0),
+      total_capacity: Number(unsold.rows[0].capacity_total || 0),
     };
     res.json(report);
   } catch (err) {

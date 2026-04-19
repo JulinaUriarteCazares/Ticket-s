@@ -43,6 +43,7 @@
             <div class="section-head">
                 <h2>Panel de admin</h2>
             </div>
+            <div id="adminStatementRoot" class="admin-statement"></div>
             <div id="adminInsightsRoot" class="admin-insights-grid"></div>
         </section>
     </main>
@@ -107,6 +108,7 @@
             token: localStorage.getItem('tm_token') || null,
             user: null,
             events: [],
+            adminSummary: { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 },
             adminInsights: []
         };
 
@@ -119,6 +121,7 @@
         const toastRoot = document.getElementById('toastRoot');
         const eventsRoot = document.getElementById('eventsRoot');
         const adminInsightsSection = document.getElementById('adminInsightsSection');
+        const adminStatementRoot = document.getElementById('adminStatementRoot');
         const adminInsightsRoot = document.getElementById('adminInsightsRoot');
         const regRoleWrap = document.getElementById('regRoleWrap');
         const regRoleHint = document.getElementById('regRoleHint');
@@ -289,9 +292,34 @@
 
         function renderAdminInsights() {
             if (!isAdmin()) {
+                adminStatementRoot.innerHTML = '';
                 adminInsightsRoot.innerHTML = '';
                 return;
             }
+
+            const summary = state.adminInsights.reduce((acc, event) => {
+                acc.ticketsSold += Number(event.tickets_sold || 0);
+                acc.totalIncome += Number(event.total_income || 0);
+                acc.artistPaid += Number(event.artist_fee || 0);
+                return acc;
+            }, {
+                ticketsSold: 0,
+                totalIncome: 0,
+                artistPaid: 0,
+            });
+
+            const net = summary.totalIncome - summary.artistPaid;
+            adminStatementRoot.innerHTML = `
+                <article class="admin-statement-card">
+                    <h3>Estado de cuenta (admin)</h3>
+                    <div class="admin-metric-grid admin-metric-grid-summary">
+                        <div class="admin-metric-item"><span>Boletos vendidos (total)</span><strong>${Number(state.adminSummary.ticketsSold || 0)}</strong></div>
+                        <div class="admin-metric-item"><span>Ingreso total por boletos</span><strong>$${formatMoney(state.adminSummary.totalIncome)}</strong></div>
+                        <div class="admin-metric-item"><span>Total pagado a artistas</span><strong>$${formatMoney(state.adminSummary.artistPaid)}</strong></div>
+                        <div class="admin-metric-item"><span>Balance neto</span><strong>$${formatMoney(state.adminSummary.balance)}</strong></div>
+                    </div>
+                </article>
+            `;
 
             if (!state.adminInsights.length) {
                 adminInsightsRoot.innerHTML = '<div class="empty">No hay eventos para mostrar.</div>';
@@ -332,8 +360,9 @@
 
             adminInsightsRoot.innerHTML = '<div class="loader">Cargando panel admin...</div>';
             try {
-                const rows = await apiCall('GET', '/reports/admin/events-overview');
-                state.adminInsights = Array.isArray(rows) ? rows : [];
+                const payload = await apiCall('GET', '/events/admin/overview');
+                state.adminInsights = Array.isArray(payload.reports) ? payload.reports : [];
+                state.adminSummary = payload.summary || { ticketsSold: 0, totalIncome: 0, artistPaid: 0, balance: 0 };
                 renderAdminInsights();
             } catch (err) {
                 adminInsightsRoot.innerHTML = '<div class="empty">No se pudo cargar el panel admin.</div>';
