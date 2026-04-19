@@ -110,7 +110,7 @@
                     <div id="eventCartItems" class="cart-list"></div>
                     <div class="cart-footer">
                         <strong id="eventCartTotal">Total: $0.00</strong>
-                        <button id="checkoutEventCart" class="buy-btn" type="button">Comprar carrito</button>
+                        <button id="checkoutEventCart" class="buy-btn" type="button">Comprar</button>
                     </div>
                 </section>
 
@@ -542,6 +542,12 @@
             return state.user && state.user.role === 'user';
         }
 
+        function isNoSeatTypeName(typeName) {
+            const normalized = String(typeName || '').trim().toLowerCase();
+            const compact = normalized.replace(/[^a-z]/g, '');
+            return compact === 'generalnormal' || compact === 'general' || compact === 'normal';
+        }
+
         function isViewer(event) {
             return !canEditEvent(event);
         }
@@ -665,6 +671,13 @@
                     available,
                     remaining,
                 };
+            }).sort((a, b) => {
+                const priceA = Number(a.price || 0);
+                const priceB = Number(b.price || 0);
+                if (priceA !== priceB) {
+                    return priceA - priceB;
+                }
+                return String(a.type_name || '').localeCompare(String(b.type_name || ''));
             });
             const visibleRows = checkoutViewer
                 ? ticketRows.filter((type) => type.remaining > 0)
@@ -694,8 +707,14 @@
                 const inCart = state.cart.find((item) => String(item.ticketTypeId) === String(type.id));
                 const selectedQty = inCart ? inCart.quantity : 0;
                 if (canBuy) {
+                    const noSeatCopy = isNoSeatTypeName(type.type_name)
+                        ? '<div class="ticket-row-note">Este boleto no incluye asiento (N/A).</div>'
+                        : '';
                     return `<article class="ticket-card-row">
-                        <div class="ticket-row-name">${type.type_name}</div>
+                        <div class="ticket-row-name-wrap">
+                            <div class="ticket-row-name">${type.type_name}</div>
+                            ${noSeatCopy}
+                        </div>
                         <div class="ticket-row-price">$${Number(type.price).toFixed(2)}</div>
                         <div class="ticket-row-stepper">
                             <button type="button" class="ticket-stepper-btn" data-card-dec-ticket="${type.id}" aria-label="Restar boleto">−</button>

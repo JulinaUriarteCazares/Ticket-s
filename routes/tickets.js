@@ -9,6 +9,8 @@ const router = express.Router();
 
 let activeSupportChecked = false;
 let activeSupported = false;
+let seatsSupportChecked = false;
+let seatsSupported = false;
 
 async function ensureActiveSupport() {
   if (activeSupportChecked) {
@@ -44,6 +46,95 @@ async function ensureActiveSupport() {
   return activeSupported;
 }
 
+async function ensureSeatsSupport() {
+  if (seatsSupportChecked) {
+    return seatsSupported;
+  }
+
+  try {
+    const check = await pool.query(
+      `SELECT 1
+       FROM information_schema.tables
+       WHERE table_name = 'seats'
+       LIMIT 1`
+    );
+
+    seatsSupported = check.rows.length > 0;
+  } catch (err) {
+    seatsSupported = false;
+  }
+
+  seatsSupportChecked = true;
+  return seatsSupported;
+}
+
+function rowLabelFromIndex(index) {
+  let n = Number(index) + 1;
+  let label = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
+}
+
+function buildSectionSeatLayout(totalSeats, occupiedLabels = new Set()) {
+  const safeTotal = Math.max(Number(totalSeats || 0), 0);
+  const sectionLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const rowsPerSection = 30;
+  const colsPerRow = 10;
+  const seatsPerSection = rowsPerSection * colsPerRow;
+  const seats = [];
+
+  for (let index = 0; index < safeTotal; index += 1) {
+    const sectionIndex = Math.floor(index / seatsPerSection);
+    const sectionLabel = sectionLabels[sectionIndex] || `S${sectionIndex + 1}`;
+    const indexInSection = index % seatsPerSection;
+    const rowNumber = Math.floor(indexInSection / colsPerRow) + 1;
+    const colNumber = (indexInSection % colsPerRow) + 1;
+    const seatLabel = `${sectionLabel}-${String(rowNumber).padStart(2, '0')}-${String(colNumber).padStart(2, '0')}`;
+    const status = occupiedLabels.has(seatLabel) ? 'sold' : 'available';
+
+    seats.push({
+      seat_label: seatLabel,
+      row_label: `${sectionLabel}-${String(rowNumber).padStart(2, '0')}`,
+      column_label: String(colNumber),
+      section_label: sectionLabel,
+      status,
+    });
+  }
+
+  return seats;
+}
+
+async function ensureDefaultSeatsForTicketType(client, ticketTypeId, capacity) {
+  const targetSeats = Math.max(Number(capacity || 0), 4500);
+  const countResult = await client.query(
+    'SELECT COUNT(*)::int AS total FROM seats WHERE ticket_type_id = $1',
+    [ticketTypeId]
+  );
+  const existing = Number(countResult.rows[0]?.total || 0);
+  if (existing >= targetSeats) {
+    return existing;
+  }
+
+  const generated = buildSectionSeatLayout(targetSeats);
+  const seatLabels = generated.map((seat) => seat.seat_label);
+  const rowLabels = generated.map((seat) => seat.row_label);
+  const colLabels = generated.map((seat) => seat.column_label);
+
+  await client.query(
+    `INSERT INTO seats (ticket_type_id, seat_label, row_label, column_label, status)
+     SELECT $1, data.seat_label, data.row_label, data.column_label, 'available'
+     FROM unnest($2::text[], $3::text[], $4::text[]) AS data(seat_label, row_label, column_label)
+     ON CONFLICT (ticket_type_id, seat_label) DO NOTHING`,
+    [ticketTypeId, seatLabels, rowLabels, colLabels]
+  );
+
+  return targetSeats;
+}
+
 function buildEventDateTime(eventDate, eventTime) {
   if (!eventDate) {
     return null;
@@ -70,6 +161,23 @@ function isPastEvent(event) {
   return eventDateTime.getTime() < Date.now();
 }
 
+function isNoSeatType(typeName) {
+  const normalized = String(typeName || '').trim().toLowerCase();
+  const compact = normalized.replace(/[^a-z]/g, '');
+  return compact === 'generalnormal' || compact === 'general' || compact === 'normal';
+}
+
+function toDisplaySeatNumber(typeName, seatNumber) {
+  const raw = String(seatNumber || '').trim();
+  if (!raw) {
+    return 'N/A';
+  }
+  if (isNoSeatType(typeName) || raw.toUpperCase().startsWith('N/A-')) {
+    return 'N/A';
+  }
+  return raw;
+}
+
 async function buildTicketPdfBuffer(ticket) {
   const qrSvg = await QRCode.toString(ticket.qr_code, {
   type: 'svg',
@@ -84,6 +192,7 @@ async function buildTicketPdfBuffer(ticket) {
   const eventTime = ticket.event_time ? ` ${ticket.event_time}` : '';
   const dateTimeLocation = `${eventDate}${eventTime} | ${ticket.location || 'Ubicacion por confirmar'}`;
   const eventImage = ticket.image_url || 'https://placehold.co/520x760?text=Evento';
+  const seatDisplay = toDisplaySeatNumber(ticket.type_name, ticket.seat_number);
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -219,7 +328,7 @@ async function buildTicketPdfBuffer(ticket) {
         <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
         <div class="generated-ticket-meta">
           <div><span>Tipo</span><strong>${escapeHtml(ticket.type_name)}</strong></div>
-          <div><span>Asiento</span><strong>${escapeHtml(ticket.seat_number)}</strong></div>
+          <div><span>Asiento</span><strong>${escapeHtml(seatDisplay)}</strong></div>
           <div><span>Precio</span><strong>$${Number(ticket.price).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
           <div><span>Estado</span><strong>${ticket.status ? 'Confirmado' : 'Usado'}</strong></div>
         </div>
@@ -269,6 +378,7 @@ async function buildBulkTicketsPdfBuffer(tickets) {
     const eventTime = ticket.event_time ? ` ${ticket.event_time}` : '';
     const dateTimeLocation = `${eventDate}${eventTime} | ${ticket.location || 'Ubicacion por confirmar'}`;
     const eventImage = ticket.image_url || 'https://placehold.co/520x760?text=Evento';
+    const seatDisplay = toDisplaySeatNumber(ticket.type_name, ticket.seat_number);
 
     return `
       <section class="ticket-page">
@@ -283,7 +393,7 @@ async function buildBulkTicketsPdfBuffer(tickets) {
               <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
               <div class="generated-ticket-meta">
                 <div><span>Tipo</span><strong>${escapeHtml(ticket.type_name)}</strong></div>
-                <div><span>Asiento</span><strong>${escapeHtml(ticket.seat_number)}</strong></div>
+                <div><span>Asiento</span><strong>${escapeHtml(seatDisplay)}</strong></div>
                 <div><span>Precio</span><strong>$${Number(ticket.price).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
                 <div><span>Estado</span><strong>${ticket.status ? 'Confirmado' : 'Usado'}</strong></div>
               </div>
@@ -496,9 +606,12 @@ router.post('/purchase', auth, async (req, res) => {
 
     const purchasedTickets = [];
     const startSold = Number(ticketType.sold);
+    const noSeatType = isNoSeatType(ticketType.type_name);
 
     for (let i = 1; i <= qty; i += 1) {
-      const seatNumber = (startSold + i).toString();
+      const seatNumber = noSeatType
+        ? `N/A-${startSold + i}`
+        : (startSold + i).toString();
       const qrCode = randomBytes(16).toString('hex');
       const qrSvg = await QRCode.toString(qrCode, {
         type: 'svg',
@@ -518,7 +631,7 @@ router.post('/purchase', auth, async (req, res) => {
         id: insertResult.rows[0].id,
         qrCode,
         qrSvg,
-        seatNumber,
+        seatNumber: toDisplaySeatNumber(ticketType.type_name, seatNumber),
         event: event
           ? {
               id: event.id,
@@ -551,6 +664,268 @@ router.post('/purchase', auth, async (req, res) => {
     res.json({
       message: 'Compra exitosa',
       quantity: qty,
+      ticketType: {
+        id: ticketType.id,
+        type_name: ticketType.type_name,
+        unit_price: unitPrice,
+      },
+      event: event
+        ? {
+            id: event.id,
+            name: event.name,
+            event_date: event.event_date,
+            event_time: event.event_time,
+            location: event.location,
+            image_url: event.image_url,
+            description: event.description,
+          }
+        : null,
+      total,
+      tickets: purchasedTickets,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/seats/:ticketTypeId', auth, async (req, res) => {
+  const { ticketTypeId } = req.params;
+
+  const client = await pool.connect();
+  try {
+    const typeResult = await client.query(
+      `SELECT tt.id, tt.type_name, tt.capacity, tt.sold, tt.event_id,
+              e.name AS event_name, e.event_date, e.event_time, e.location
+       FROM ticket_types tt
+       JOIN events e ON e.id = tt.event_id
+       WHERE tt.id = $1`,
+      [ticketTypeId]
+    );
+
+    const ticketType = typeResult.rows[0];
+    if (!ticketType) {
+      return res.status(404).json({ error: 'Tipo de boleto no encontrado' });
+    }
+
+    const supportsSeats = await ensureSeatsSupport();
+    let seats = [];
+
+    if (supportsSeats) {
+      await ensureDefaultSeatsForTicketType(client, ticketTypeId, ticketType.capacity);
+
+      const seatsResult = await client.query(
+        `SELECT seat_label, row_label, column_label, status
+         FROM seats
+         WHERE ticket_type_id = $1
+         ORDER BY row_label, column_label`,
+        [ticketTypeId]
+      );
+
+      seats = seatsResult.rows.map((seat) => ({
+        ...seat,
+        section_label: String(seat.seat_label || '').split('-')[0] || 'S1',
+      }));
+    }
+
+    if (!seats.length) {
+      const soldResult = await client.query(
+        `SELECT seat_number
+         FROM tickets
+         WHERE ticket_type_id = $1`,
+        [ticketTypeId]
+      );
+      const occupied = new Set(soldResult.rows.map((row) => String(row.seat_number || '').trim()).filter(Boolean));
+      seats = buildSectionSeatLayout(Math.max(Number(ticketType.capacity || 0), 4500), occupied);
+    }
+
+    res.json({
+      ticketType: {
+        id: ticketType.id,
+        type_name: ticketType.type_name,
+        capacity: Number(ticketType.capacity || 0),
+        sold: Number(ticketType.sold || 0),
+      },
+      event: {
+        id: ticketType.event_id,
+        name: ticketType.event_name,
+        event_date: ticketType.event_date,
+        event_time: ticketType.event_time,
+        location: ticketType.location,
+      },
+      seats,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/purchase-with-seats', auth, async (req, res) => {
+  const { ticket_type_id, seat_labels: seatLabelsRaw } = req.body;
+  const userId = req.user.id;
+  const seatLabels = Array.isArray(seatLabelsRaw)
+    ? [...new Set(seatLabelsRaw.map((label) => String(label || '').trim().toUpperCase()).filter(Boolean))]
+    : [];
+
+  if (!ticket_type_id) {
+    return res.status(400).json({ error: 'ticket_type_id es obligatorio' });
+  }
+
+  if (!seatLabels.length) {
+    return res.status(400).json({ error: 'Debes seleccionar al menos un asiento' });
+  }
+
+  if (seatLabels.length > 20) {
+    return res.status(400).json({ error: 'Maximo 20 asientos por compra' });
+  }
+
+  const client = await pool.connect();
+  try {
+    const supportsActive = await ensureActiveSupport();
+    const supportsSeats = await ensureSeatsSupport();
+
+    await client.query('BEGIN');
+
+    const typeResult = await client.query(
+      'SELECT * FROM ticket_types WHERE id = $1 FOR UPDATE',
+      [ticket_type_id]
+    );
+    const ticketType = typeResult.rows[0];
+    if (!ticketType) throw new Error('Tipo de boleto no existe');
+
+    const eventQuery = supportsActive
+      ? `SELECT id, name, event_date, event_time, location, image_url, description, active
+         FROM events
+         WHERE id = $1`
+      : `SELECT id, name, event_date, event_time, location, image_url, description, TRUE::boolean AS active
+         FROM events
+         WHERE id = $1`;
+    const eventResult = await client.query(eventQuery, [ticketType.event_id]);
+    const event = eventResult.rows[0];
+
+    if (event && isPastEvent(event)) {
+      throw new Error('Este evento ya paso y no admite compras');
+    }
+    if (event && supportsActive && event.active === false) {
+      throw new Error('Este evento esta inactivo y no admite compras');
+    }
+
+    const available = Number(ticketType.capacity) - Number(ticketType.sold || 0);
+    if (available < seatLabels.length) {
+      throw new Error(`Solo hay ${available} boletos disponibles para este tipo`);
+    }
+
+    let seatsToSell = [];
+    if (supportsSeats) {
+      await ensureDefaultSeatsForTicketType(client, ticket_type_id, ticketType.capacity);
+
+      const seatsResult = await client.query(
+        `SELECT id, seat_label, status
+         FROM seats
+         WHERE ticket_type_id = $1
+           AND UPPER(seat_label) = ANY($2::text[])
+         FOR UPDATE`,
+        [ticket_type_id, seatLabels]
+      );
+
+      if (seatsResult.rows.length !== seatLabels.length) {
+        throw new Error('Algunos asientos no existen para este tipo de boleto');
+      }
+
+      const unavailable = seatsResult.rows.filter((seat) => String(seat.status) !== 'available');
+      if (unavailable.length) {
+        throw new Error('Algunos asientos ya no estan disponibles');
+      }
+
+      seatsToSell = seatLabels
+        .map((label) => seatsResult.rows.find((seat) => String(seat.seat_label || '').toUpperCase() === label))
+        .filter(Boolean);
+    } else {
+      const soldSeatsResult = await client.query(
+        `SELECT seat_number
+         FROM tickets
+         WHERE ticket_type_id = $1
+           AND seat_number = ANY($2::text[])
+         FOR UPDATE`,
+        [ticket_type_id, seatLabels]
+      );
+
+      if (soldSeatsResult.rows.length) {
+        throw new Error('Algunos asientos ya no estan disponibles');
+      }
+
+      seatsToSell = seatLabels.map((label) => ({ seat_label: label }));
+    }
+
+    const purchasedTickets = [];
+    for (const seat of seatsToSell) {
+      const qrCode = randomBytes(16).toString('hex');
+      const qrSvg = await QRCode.toString(qrCode, {
+        type: 'svg',
+        margin: 1,
+        width: 180,
+        errorCorrectionLevel: 'M'
+      });
+
+      const insertResult = await client.query(
+        `INSERT INTO tickets (ticket_type_id, user_id, qr_code, seat_number)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [ticket_type_id, userId, qrCode, seat.seat_label]
+      );
+
+      if (supportsSeats && seat.id) {
+        await client.query(
+          `UPDATE seats
+           SET status = 'sold',
+               reserved_by = $2,
+               reserved_until = NULL
+           WHERE id = $1`,
+          [seat.id, userId]
+        );
+      }
+
+      purchasedTickets.push({
+        id: insertResult.rows[0].id,
+        qrCode,
+        qrSvg,
+        seatNumber: seat.seat_label,
+        event: event
+          ? {
+              id: event.id,
+              name: event.name,
+              event_date: event.event_date,
+              event_time: event.event_time,
+              location: event.location,
+              image_url: event.image_url,
+              description: event.description,
+            }
+          : null,
+        ticketType: {
+          id: ticketType.id,
+          type_name: ticketType.type_name,
+          price: Number(ticketType.price),
+        },
+      });
+    }
+
+    await client.query(
+      'UPDATE ticket_types SET sold = sold + $2 WHERE id = $1',
+      [ticket_type_id, seatsToSell.length]
+    );
+
+    await client.query('COMMIT');
+
+    const unitPrice = Number(ticketType.price);
+    const total = unitPrice * seatsToSell.length;
+
+    res.json({
+      message: 'Compra exitosa',
+      quantity: seatsToSell.length,
       ticketType: {
         id: ticketType.id,
         type_name: ticketType.type_name,

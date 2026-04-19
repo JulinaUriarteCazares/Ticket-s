@@ -73,7 +73,33 @@
             </div>
             <div class="cart-footer">
                 <strong id="cartTotal">Total: $0.00</strong>
-                <button id="checkoutCart" class="buy-btn" type="button">Comprar carrito</button>
+                <button id="checkoutCart" class="buy-btn" type="button">Comprar</button>
+            </div>
+        </section>
+
+        <section id="seatPickerModal" class="seat-picker-modal hidden" aria-live="polite">
+            <div class="seat-picker-card" role="dialog" aria-modal="true" aria-label="Seleccion de asientos">
+                <div class="seat-picker-head">
+                    <div>
+                        <h2>Selecciona tus asientos</h2>
+                        <p id="seatPickerMeta" class="ticket-summary"></p>
+                    </div>
+                    <button id="closeSeatPicker" class="image-btn" type="button">Cerrar</button>
+                </div>
+                <div class="seat-picker-legend">
+                    <span><i class="seat-dot seat-dot-selected"></i>Seleccionado</span>
+                    <span><i class="seat-dot seat-dot-available"></i>Disponible</span>
+                    <span><i class="seat-dot seat-dot-occupied"></i>Ocupado</span>
+                </div>
+                <div class="seat-screen">Pantalla | Sala</div>
+                <div id="seatPickerGrid" class="seat-picker-grid"></div>
+                <div class="seat-picker-footer">
+                    <strong id="seatPickerCount">0 seleccionados</strong>
+                    <div class="seat-picker-actions">
+                        <button id="seatPickerPrev" class="image-btn" type="button">Anterior</button>
+                        <button id="seatPickerNext" class="buy-btn" type="button">Siguiente</button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -110,6 +136,14 @@
             eventId: null,
             event: null,
             cart: [],
+            seatWizard: {
+                open: false,
+                index: 0,
+                items: [],
+                autoItems: [],
+                seatsByType: {},
+                selectedByType: {},
+            },
         };
 
         const checkoutPanel = document.getElementById('checkoutPanel');
@@ -121,6 +155,13 @@
         const purchaseCloseToHome = document.getElementById('purchaseCloseToHome');
         const clearCartButton = document.getElementById('clearCart');
         const checkoutCartButton = document.getElementById('checkoutCart');
+        const seatPickerModal = document.getElementById('seatPickerModal');
+        const seatPickerMeta = document.getElementById('seatPickerMeta');
+        const seatPickerGrid = document.getElementById('seatPickerGrid');
+        const seatPickerCount = document.getElementById('seatPickerCount');
+        const seatPickerPrev = document.getElementById('seatPickerPrev');
+        const seatPickerNext = document.getElementById('seatPickerNext');
+        const closeSeatPicker = document.getElementById('closeSeatPicker');
         const purchaseSuccessBanner = document.getElementById('purchaseSuccessBanner');
         const purchaseSuccessDetail = document.getElementById('purchaseSuccessDetail');
         const purchaseSuccessSummary = document.getElementById('purchaseSuccessSummary');
@@ -551,13 +592,30 @@
             return escapeHtml(value).replace(/`/g, '&#96;');
         }
 
+        function isNoSeatTicketTypeName(typeName) {
+            const normalized = String(typeName || '').trim().toLowerCase();
+            const compact = normalized.replace(/[^a-z]/g, '');
+            return compact === 'generalnormal' || compact === 'general' || compact === 'normal';
+        }
+
+        function getDisplaySeatNumber(typeName, seatNumber) {
+            const raw = String(seatNumber || '').trim();
+            if (!raw) {
+                return 'N/A';
+            }
+            if (isNoSeatTicketTypeName(typeName) || raw.toUpperCase().startsWith('N/A-')) {
+                return 'N/A';
+            }
+            return raw;
+        }
+
         function buildTicketCardMarkup(ticket, index) {
             const event = ticket.event || state.event || {};
             const ticketType = ticket.ticketType || {};
             const eventImage = event.image_url || 'https://placehold.co/520x760?text=Evento';
-            const seatNumber = ticket.seatNumber || 'N/A';
             const qrSvg = ticket.qrSvg || '<svg></svg>';
             const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
+            const seatNumber = getDisplaySeatNumber(typeName, ticket.seatNumber);
             const eventDate = formatDate(event.event_date, event.event_time);
             const artistName = event.artist_name || 'Por confirmar';
 
@@ -617,7 +675,7 @@
             const eventImage = event.image_url || 'https://placehold.co/520x760?text=Evento';
             const eventDate = formatDate(event.event_date, event.event_time);
             const typeName = ticketType.type_name || ticket.typeName || 'Boleto';
-            const seatNumber = ticket.seatNumber || 'N/A';
+            const seatNumber = getDisplaySeatNumber(typeName, ticket.seatNumber);
             const qrSvg = ticket.qrSvg || '';
 
             return `<!DOCTYPE html>
@@ -1039,31 +1097,185 @@
             renderCart();
         }
 
-        async function checkoutCart() {
+        function getSeatWizardItemKey(item) {
+            return `${String(item.eventId || '')}::${String(item.ticketTypeId || '')}`;
+        }
+
+        function requiresSeatSelection(item) {
+            const normalized = String(item?.typeName || '').trim().toLowerCase();
+            return !(normalized === 'general/normal' || normalized === 'general' || normalized === 'normal');
+        }
+
+        function getSeatWizardCurrentItem() {
+            return state.seatWizard.items[state.seatWizard.index] || null;
+        }
+
+        function closeSeatWizard() {
+            state.seatWizard.open = false;
+            seatPickerModal.classList.add('hidden');
+        }
+
+        async function fetchSeatMap(ticketTypeId) {
+            const data = await apiCall('GET', `/tickets/seats/${ticketTypeId}`);
+            return Array.isArray(data.seats) ? data.seats : [];
+        }
+
+        function updateSeatWizardCounter() {
+            const item = getSeatWizardCurrentItem();
+            if (!item) {
+                seatPickerCount.textContent = '0 seleccionados';
+                return;
+            }
+
+            const key = getSeatWizardItemKey(item);
+            const selected = state.seatWizard.selectedByType[key] || [];
+            seatPickerCount.textContent = `${selected.length} de ${item.quantity} seleccionados`;
+        }
+
+        function renderSeatButtonsForCurrentItem() {
+            const item = getSeatWizardCurrentItem();
+            if (!item) {
+                seatPickerGrid.innerHTML = '';
+                updateSeatWizardCounter();
+                return;
+            }
+
+            const key = getSeatWizardItemKey(item);
+            const selectedSet = new Set(state.seatWizard.selectedByType[key] || []);
+            const seats = state.seatWizard.seatsByType[key] || [];
+
+            if (!seats.length) {
+                seatPickerGrid.innerHTML = '<div class="empty">No hay asientos configurados para este boleto.</div>';
+                updateSeatWizardCounter();
+                return;
+            }
+
+            const sectionMap = new Map();
+            seats.forEach((seat) => {
+                const sectionLabel = String(seat.section_label || '').trim().toUpperCase() || String(seat.seat_label || '').split('-')[0] || 'S1';
+                if (!sectionMap.has(sectionLabel)) {
+                    sectionMap.set(sectionLabel, []);
+                }
+                sectionMap.get(sectionLabel).push(seat);
+            });
+
+            const sectionLabels = Array.from(sectionMap.keys()).sort((a, b) => a.localeCompare(b));
+
+            seatPickerGrid.innerHTML = sectionLabels.map((sectionLabel) => {
+                const seatsInSection = sectionMap.get(sectionLabel) || [];
+                const seatButtons = seatsInSection.map((seat) => {
+                    const label = String(seat.seat_label || '').toUpperCase();
+                    const status = String(seat.status || 'available').toLowerCase();
+                    const occupied = status !== 'available';
+                    const selected = selectedSet.has(label);
+                    const classes = [
+                        'seat-btn',
+                        occupied ? 'is-occupied' : 'is-available',
+                        selected ? 'is-selected' : '',
+                    ].filter(Boolean).join(' ');
+
+                    return `<button type="button" class="${classes}" data-seat-label="${label}" ${occupied ? 'disabled' : ''}>${label}</button>`;
+                }).join('');
+
+                return `
+                    <section class="seat-section-card">
+                        <h3>SECCION ${sectionLabel}</h3>
+                        <div class="seat-section-grid">${seatButtons}</div>
+                    </section>
+                `;
+            }).join('');
+
+            updateSeatWizardCounter();
+        }
+
+        async function renderSeatWizardStep() {
+            const item = getSeatWizardCurrentItem();
+            if (!item) {
+                closeSeatWizard();
+                return;
+            }
+
+            const key = getSeatWizardItemKey(item);
+            if (!state.seatWizard.seatsByType[key]) {
+                state.seatWizard.seatsByType[key] = await fetchSeatMap(item.ticketTypeId);
+            }
+
+            const totalSeats = (state.seatWizard.seatsByType[key] || []).length;
+            seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${item.typeName} · Elige ${item.quantity} asiento(s) de ${totalSeats} asientos`;
+            seatPickerPrev.disabled = state.seatWizard.index === 0;
+            seatPickerNext.textContent = state.seatWizard.index === state.seatWizard.items.length - 1
+                ? 'Confirmar compra'
+                : 'Siguiente';
+
+            renderSeatButtonsForCurrentItem();
+        }
+
+        function startSeatWizard() {
             if (!state.cart.length) {
                 notify('El carrito esta vacio', 'err');
                 return;
             }
 
-            const purchaseSnapshot = state.cart.map((item) => ({
-                eventId: item.eventId,
-                eventName: item.eventName || '',
-                typeName: item.typeName,
-                quantity: Number(item.quantity),
-                unitPrice: Number(item.unitPrice)
-            }));
+            const items = state.cart
+                .map((item) => ({
+                    ...item,
+                    quantity: Number(item.quantity || 0),
+                }))
+                .filter((item) => item.quantity > 0);
 
+            if (!items.length) {
+                notify('No hay boletos para comprar', 'err');
+                return;
+            }
+
+            const seatItems = items.filter((item) => requiresSeatSelection(item));
+            const autoItems = items.filter((item) => !requiresSeatSelection(item));
+
+            state.seatWizard = {
+                open: seatItems.length > 0,
+                index: 0,
+                items: seatItems,
+                autoItems,
+                seatsByType: {},
+                selectedByType: {},
+            };
+
+            if (!seatItems.length) {
+                confirmSeatWizardPurchase().catch((err) => notify(err.message, 'err'));
+                return;
+            }
+
+            seatPickerModal.classList.remove('hidden');
+            renderSeatWizardStep().catch((err) => {
+                notify(err.message, 'err');
+                closeSeatWizard();
+            });
+        }
+
+        async function confirmSeatWizardPurchase() {
+            const purchaseSnapshot = [];
+            const successfulKeys = new Set();
+            const purchasedTickets = [];
             let success = 0;
             let failed = 0;
-            const purchasedTickets = [];
 
-            for (const item of state.cart) {
+            for (const item of state.seatWizard.autoItems || []) {
                 try {
                     const result = await apiCall('POST', '/tickets/purchase', {
                         ticket_type_id: item.ticketTypeId,
                         quantity: item.quantity,
                     });
+
                     success += Number(result.quantity || item.quantity || 0);
+                    successfulKeys.add(getSeatWizardItemKey(item));
+                    purchaseSnapshot.push({
+                        eventId: item.eventId,
+                        eventName: item.eventName || '',
+                        typeName: item.typeName,
+                        quantity: Number(result.quantity || item.quantity || 0),
+                        unitPrice: Number(item.unitPrice),
+                    });
+
                     if (Array.isArray(result.tickets)) {
                         purchasedTickets.push(...result.tickets.map((ticket) => ({
                             ...ticket,
@@ -1074,11 +1286,53 @@
                     }
                 } catch (err) {
                     failed += 1;
+                    notify(err.message || `No se pudo completar ${item.typeName}`, 'err');
                 }
             }
 
-            state.cart = [];
+            for (const item of state.seatWizard.items) {
+                const key = getSeatWizardItemKey(item);
+                const seatLabels = state.seatWizard.selectedByType[key] || [];
+
+                if (seatLabels.length !== item.quantity) {
+                    notify(`Debes seleccionar ${item.quantity} asiento(s) para ${item.typeName}`, 'err');
+                    return;
+                }
+
+                try {
+                    const result = await apiCall('POST', '/tickets/purchase-with-seats', {
+                        ticket_type_id: item.ticketTypeId,
+                        seat_labels: seatLabels,
+                    });
+
+                    success += Number(result.quantity || seatLabels.length);
+                    successfulKeys.add(key);
+                    purchaseSnapshot.push({
+                        eventId: item.eventId,
+                        eventName: item.eventName || '',
+                        typeName: item.typeName,
+                        quantity: seatLabels.length,
+                        unitPrice: Number(item.unitPrice),
+                    });
+
+                    if (Array.isArray(result.tickets)) {
+                        purchasedTickets.push(...result.tickets.map((ticket) => ({
+                            ...ticket,
+                            event: result.event || state.event,
+                            ticketType: result.ticketType || null,
+                            unitPrice: result.ticketType?.unit_price ?? item.unitPrice,
+                        })));
+                    }
+                } catch (err) {
+                    failed += 1;
+                    notify(err.message || `No se pudo completar ${item.typeName}`, 'err');
+                }
+            }
+
+            state.cart = state.cart.filter((item) => !successfulKeys.has(getSeatWizardItemKey(item)));
             saveCartToStorage();
+            renderCart();
+            closeSeatWizard();
 
             if (success > 0) {
                 const summaryItems = purchaseSnapshot
@@ -1094,15 +1348,21 @@
                     <ul>${summaryItems}</ul>
                     <p class="purchase-success-total">Total pagado: $${formatMoney(summaryTotal)}</p>
                 `;
+
                 notify('Compra completada', 'ok');
-                showPurchaseSuccess(`Tu compra fue exitosa. Se procesaron ${success} elemento(s).`, summaryHtml);
+                showPurchaseSuccess(`Tu compra fue exitosa. Se procesaron ${success} boleto(s).`, summaryHtml);
                 renderPurchasedTickets(purchasedTickets);
             }
+
             if (failed > 0) {
-                notify(`No se pudieron comprar ${failed} elementos del carrito`, 'err');
+                notify(`No se pudieron comprar ${failed} tipo(s) de boleto`, 'err');
             }
 
             await loadEvent();
+        }
+
+        async function checkoutCart() {
+            startSeatWizard();
         }
 
         async function loginHandler() {
@@ -1243,6 +1503,70 @@
             });
             document.getElementById('clearSavedCart').addEventListener('click', clearSavedCart);
             checkoutCartButton.addEventListener('click', checkoutCart);
+            closeSeatPicker.addEventListener('click', closeSeatWizard);
+            seatPickerPrev.addEventListener('click', () => {
+                if (state.seatWizard.index < 1) {
+                    return;
+                }
+                state.seatWizard.index -= 1;
+                renderSeatWizardStep().catch((err) => notify(err.message, 'err'));
+            });
+            seatPickerNext.addEventListener('click', async () => {
+                const item = getSeatWizardCurrentItem();
+                if (!item) {
+                    return;
+                }
+
+                const key = getSeatWizardItemKey(item);
+                const selected = state.seatWizard.selectedByType[key] || [];
+                if (selected.length !== item.quantity) {
+                    notify(`Selecciona ${item.quantity} asiento(s) para continuar`, 'err');
+                    return;
+                }
+
+                if (state.seatWizard.index === state.seatWizard.items.length - 1) {
+                    await confirmSeatWizardPurchase();
+                    return;
+                }
+
+                state.seatWizard.index += 1;
+                renderSeatWizardStep().catch((err) => notify(err.message, 'err'));
+            });
+
+            seatPickerGrid.addEventListener('click', (event) => {
+                const seatButton = event.target.closest('[data-seat-label]');
+                if (!seatButton) {
+                    return;
+                }
+
+                const item = getSeatWizardCurrentItem();
+                if (!item) {
+                    return;
+                }
+
+                const key = getSeatWizardItemKey(item);
+                const label = String(seatButton.getAttribute('data-seat-label') || '').toUpperCase();
+                const selected = state.seatWizard.selectedByType[key] || [];
+                const exists = selected.includes(label);
+
+                if (exists) {
+                    state.seatWizard.selectedByType[key] = selected.filter((seat) => seat !== label);
+                } else {
+                    if (selected.length >= item.quantity) {
+                        notify(`Solo puedes elegir ${item.quantity} asiento(s)`, 'info');
+                        return;
+                    }
+                    state.seatWizard.selectedByType[key] = [...selected, label];
+                }
+
+                renderSeatButtonsForCurrentItem();
+            });
+
+            seatPickerModal.addEventListener('click', (event) => {
+                if (event.target === seatPickerModal) {
+                    closeSeatWizard();
+                }
+            });
             document.getElementById('downloadAllTickets').addEventListener('click', downloadAllTickets);
             document.getElementById('closePurchaseSuccess').addEventListener('click', () => {
                 hidePurchaseSuccess();

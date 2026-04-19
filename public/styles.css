@@ -89,6 +89,7 @@ body {
     gap: 8px;
     flex-wrap: nowrap;
     justify-content: flex-end;
+    margin-left: 6px;
     min-width: 0;
 }
 
@@ -96,15 +97,25 @@ body {
     border: 0;
     border-radius: 999px;
     padding: 8px 12px;
+    width: auto;
     font-weight: 700;
     font-size: 12px;
     line-height: 1;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     cursor: pointer;
     background: var(--ink);
     color: #fff;
     transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+#cartTopButton {
+    min-width: max-content;
+    padding: 8px 16px;
+    margin: 0;
 }
 
 .auth-mini:hover {
@@ -122,6 +133,13 @@ body {
     border-radius: 999px;
     border: 1px solid var(--line);
     padding: 8px 12px;
+    width: auto;
+    min-width: max-content;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex: 0 0 auto;
     font-size: 12px;
     color: var(--muted);
     background: var(--surface);
@@ -1000,6 +1018,19 @@ select {
     color: #1e2532;
 }
 
+.ticket-row-name-wrap {
+    flex: 0 0 220px;
+    display: grid;
+    gap: 2px;
+}
+
+.ticket-row-note {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6f6554;
+    letter-spacing: 0.01em;
+}
+
 .ticket-row-price {
     flex: 0 0 90px;
     font-size: 15px;
@@ -1715,6 +1746,10 @@ select {
 
     .ticket-row-name,
     .ticket-row-price {
+        flex: 1 0 auto;
+    }
+
+    .ticket-row-name-wrap {
         flex: 1 0 auto;
     }
 
