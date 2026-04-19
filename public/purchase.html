@@ -124,6 +124,20 @@
             }
         }
 
+        function goBackToEvent() {
+            if (state.eventId) {
+                window.location.href = `/event.html?id=${encodeURIComponent(state.eventId)}`;
+                return;
+            }
+            window.location.href = '/';
+        }
+
+        function handleAuthDismissReturn() {
+            if (!state.token) {
+                goBackToEvent();
+            }
+        }
+
         function showPurchaseSuccess(message, summaryHtml = '') {
             purchaseSuccessDetail.textContent = message || 'Gracias por tu compra.';
             purchaseSuccessSummary.innerHTML = summaryHtml;
@@ -715,8 +729,36 @@
                 openAuthModal();
             }
             document.getElementById('backToEvent').addEventListener('click', () => {
-                window.location.href = `/event.html?id=${encodeURIComponent(state.eventId)}`;
+                goBackToEvent();
             });
+            const loginModal = document.getElementById('loginModal');
+            const registerModal = document.getElementById('registerModal');
+            const closeLoginIcon = document.getElementById('closeLoginIcon');
+            const closeRegisterIcon = document.getElementById('closeRegisterIcon');
+
+            if (closeLoginIcon) {
+                closeLoginIcon.addEventListener('click', handleAuthDismissReturn);
+            }
+
+            if (closeRegisterIcon) {
+                closeRegisterIcon.addEventListener('click', handleAuthDismissReturn);
+            }
+
+            if (loginModal) {
+                loginModal.addEventListener('click', (event) => {
+                    if (event.target === loginModal) {
+                        handleAuthDismissReturn();
+                    }
+                });
+            }
+
+            if (registerModal) {
+                registerModal.addEventListener('click', (event) => {
+                    if (event.target === registerModal) {
+                        handleAuthDismissReturn();
+                    }
+                });
+            }
             document.getElementById('doLogin').addEventListener('click', loginHandler);
             document.getElementById('doRegister').addEventListener('click', registerHandler);
             document.getElementById('clearCart').addEventListener('click', () => {

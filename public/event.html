@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalle de Evento</title>
     <link rel="stylesheet" href="/styles.css">
+    <style>
+        .auth-modal {
+            background: rgba(17, 19, 24, 0.75);
+        }
+    </style>
 </head>
 <body>
     <header class="topbar">
@@ -215,6 +220,8 @@
 
     <div id="toastRoot" class="toasts"></div>
 
+    <script src="/auth-modal.js"></script>
+
     <script>
         const state = {
             token: localStorage.getItem('tm_token') || null,
@@ -264,6 +271,21 @@
             toast.textContent = message;
             document.getElementById('toastRoot').appendChild(toast);
             setTimeout(() => toast.remove(), 3500);
+        }
+
+        function openAuthModal() {
+            if (typeof window.openLoginModal === 'function') {
+                window.openLoginModal();
+            }
+        }
+
+        function closeAuthModal() {
+            if (typeof window.closeLoginModal === 'function') {
+                window.closeLoginModal();
+            }
+            if (typeof window.closeRegisterModal === 'function') {
+                window.closeRegisterModal();
+            }
         }
 
         function parseUserFromToken(token) {
@@ -918,6 +940,53 @@
             }
         }
 
+        async function loginHandler() {
+            const email = document.getElementById('loginEmail')?.value.trim();
+            const password = document.getElementById('loginPassword')?.value;
+
+            if (!email || !password) {
+                notify('Completa correo y contrasena', 'err');
+                return;
+            }
+
+            try {
+                const data = await apiCall('POST', '/auth/login', { email, password });
+                state.token = data.token;
+                state.user = data.user || parseUserFromToken(data.token);
+                localStorage.setItem('tm_token', data.token);
+                if (state.user) {
+                    localStorage.setItem('tm_user', JSON.stringify(state.user));
+                }
+                closeAuthModal();
+                notify('Sesion iniciada', 'ok');
+                await loadEvent();
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        async function registerHandler() {
+            const name = document.getElementById('regName')?.value.trim();
+            const email = document.getElementById('regEmail')?.value.trim();
+            const password = document.getElementById('regPassword')?.value;
+
+            if (!name || !email || !password) {
+                notify('Completa nombre, correo y contrasena', 'err');
+                return;
+            }
+
+            try {
+                await apiCall('POST', '/auth/register', { name, email, password, role: 'user' });
+                notify('Cuenta creada. Inicia sesion para continuar', 'ok');
+                if (typeof window.closeRegisterModal === 'function' && typeof window.openLoginModal === 'function') {
+                    window.closeRegisterModal();
+                    window.openLoginModal();
+                }
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
         function initSession() {
             const storedUser = localStorage.getItem('tm_user');
             if (storedUser) {
@@ -971,8 +1040,27 @@
         deactivateEventInlineBtn.addEventListener('click', deactivateEventInline);
         imagePicker.addEventListener('change', handleImageSelection);
         goToCheckout.addEventListener('click', () => {
+            if (!state.token || !state.user) {
+                notify('Inicia sesion para continuar con la compra', 'info');
+                openAuthModal();
+                return;
+            }
+
+            if (!isRegularUser()) {
+                notify('Solo usuarios normales pueden comprar boletos', 'err');
+                return;
+            }
+
             window.location.href = `/purchase.html?id=${encodeURIComponent(state.eventId)}`;
         });
+        const doLoginButton = document.getElementById('doLogin');
+        const doRegisterButton = document.getElementById('doRegister');
+        if (doLoginButton) {
+            doLoginButton.addEventListener('click', loginHandler);
+        }
+        if (doRegisterButton) {
+            doRegisterButton.addEventListener('click', registerHandler);
+        }
         document.getElementById('createTicketType').addEventListener('click', createTicketType);
         document.getElementById('clearTicketTypeForm').addEventListener('click', clearTicketTypeForm);
         document.getElementById('clearEventCart').addEventListener('click', () => {
@@ -1026,7 +1114,7 @@
             const loginButton = event.target.closest('[data-checkout-login]');
             if (loginButton) {
                 notify('Inicia sesion como usuario para comprar boletos', 'info');
-                window.location.href = '/';
+                openAuthModal();
                 return;
             }
 
