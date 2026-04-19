@@ -16,6 +16,7 @@
         <div class="topbar-right">
             <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
             <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
                 <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
             </div>
             <div class="topbar-actions">
@@ -172,6 +173,7 @@
         const cartStorageWrap = document.querySelector('.purchase-cart-storage');
         const sessionMenuButton = document.getElementById('sessionMenuButton');
         const sessionMenu = document.getElementById('sessionMenu');
+        const settingsMenuButton = document.getElementById('settingsMenuButton');
         const logoutMenuButton = document.getElementById('logoutMenuButton');
         const cartTopButton = document.getElementById('cartTopButton');
         const loginButton = document.getElementById('loginButton');
@@ -1458,6 +1460,10 @@
             sessionMenuButton.addEventListener('click', (event) => {
                 event.stopPropagation();
                 toggleSessionMenu();
+            });
+            settingsMenuButton.addEventListener('click', () => {
+                closeSessionMenu();
+                window.location.href = '/settings.html';
             });
             logoutMenuButton.addEventListener('click', async () => {
                 await logoutHandler();

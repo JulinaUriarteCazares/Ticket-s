@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -79,6 +80,74 @@ router.post('/login', async (req, res) => {
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/me', auth, async (req, res) => {
+  const { password, confirm_text: confirmText } = req.body || {};
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  if (!password) {
+    return res.status(400).json({ error: 'La contraseña es obligatoria' });
+  }
+
+  if (String(confirmText || '').trim().toUpperCase() !== 'ELIMINAR') {
+    return res.status(400).json({ error: 'Debes escribir ELIMINAR para confirmar' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      'SELECT id, password_hash FROM users WHERE id = $1 FOR UPDATE',
+      [userId]
+    );
+    const user = userResult.rows[0];
+    if (!user) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Contraseña incorrecta' });
+    }
+
+    // Remove owned tickets to satisfy foreign-key constraints.
+    await client.query('DELETE FROM tickets WHERE user_id = $1', [userId]);
+
+    // Best-effort cleanup for optional tables in some deployments.
+    try {
+      await client.query('UPDATE reports SET generated_by = NULL WHERE generated_by = $1', [userId]);
+    } catch (err) {
+      if (err.code !== '42P01') {
+        throw err;
+      }
+    }
+
+    try {
+      await client.query('UPDATE seats SET reserved_by = NULL, reserved_until = NULL WHERE reserved_by = $1', [userId]);
+    } catch (err) {
+      if (err.code !== '42P01') {
+        throw err;
+      }
+    }
+
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Cuenta eliminada correctamente' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

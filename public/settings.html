@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuraciones</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand brand-link" href="/" aria-label="Ir al inicio">
+            <div class="brand-mark">TM</div>
+            <span>Ticketmaster Clone</span>
+        </a>
+        <div class="topbar-right">
+            <button id="sessionMenuButton" class="session-pill session-menu-trigger hidden" type="button" aria-haspopup="true" aria-expanded="false">Sin sesion activa</button>
+            <div id="sessionMenu" class="session-menu hidden" role="menu" aria-label="Sesion">
+                <button id="settingsMenuButton" class="session-menu-item" type="button" role="menuitem">Configuraciones</button>
+                <button id="logoutMenuButton" class="session-menu-item" type="button" role="menuitem">Cerrar sesion</button>
+            </div>
+            <div class="topbar-actions">
+                <button id="cartTopButton" class="auth-mini secondary hidden" type="button">Carrito (0)</button>
+                <button id="loginButton" class="auth-mini" type="button">Iniciar sesion</button>
+                <button id="registerButton" class="auth-mini secondary" type="button">Registrarte</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel" style="max-width:760px; margin: 0 auto; display:grid; gap:12px;">
+            <h1 class="title" style="margin:0;">Configuraciones</h1>
+            <p class="meta" style="margin:0;">Gestiona tu cuenta.</p>
+
+            <section class="danger-box" style="display:grid; gap:10px;">
+                <h2 style="margin:0; font-size:22px;">Eliminar cuenta</h2>
+                <p class="helper" style="margin:0;">Esta accion es permanente. Se eliminaran tus boletos y tu usuario.</p>
+
+                <div class="grid">
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="deletePassword">Contraseña</label>
+                        <input id="deletePassword" type="password" placeholder="Tu contraseña actual" autocomplete="current-password">
+                    </div>
+                    <div class="full" style="display:grid; gap:6px;">
+                        <label class="field-label" for="deleteConfirmText">Escribe ELIMINAR para confirmar</label>
+                        <input id="deleteConfirmText" type="text" placeholder="ELIMINAR" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="deleteAccountButton" class="delete-event" type="button">Eliminar mi cuenta</button>
+                    <button id="cancelDeleteButton" type="button">Cancelar</button>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <div id="toastRoot" class="toasts"></div>
+
+    <script>
+        const state = {
+            token: localStorage.getItem('tm_token') || null,
+            user: null,
+        };
+
+        const sessionMenuButton = document.getElementById('sessionMenuButton');
+        const sessionMenu = document.getElementById('sessionMenu');
+        const settingsMenuButton = document.getElementById('settingsMenuButton');
+        const logoutMenuButton = document.getElementById('logoutMenuButton');
+        const cartTopButton = document.getElementById('cartTopButton');
+        const loginButton = document.getElementById('loginButton');
+        const registerButton = document.getElementById('registerButton');
+
+        function notify(message, kind = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${kind}`;
+            toast.textContent = message;
+            document.getElementById('toastRoot').appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        function parseUserFromToken(token) {
+            if (!token) {
+                return null;
+            }
+            try {
+                const payload = token.split('.')[1];
+                const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const data = JSON.parse(atob(normalized));
+                if (!data || !data.id || !data.role) {
+                    return null;
+                }
+                return { id: data.id, role: data.role, name: data.role };
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function closeSessionMenu() {
+            sessionMenu.classList.add('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSessionMenu() {
+            if (!state.user) {
+                return;
+            }
+            const isOpen = !sessionMenu.classList.contains('hidden');
+            if (isOpen) {
+                closeSessionMenu();
+                return;
+            }
+            sessionMenu.classList.remove('hidden');
+            sessionMenuButton.setAttribute('aria-expanded', 'true');
+        }
+
+        async function apiCall(method, url, body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (state.token) {
+                headers.Authorization = `Bearer ${state.token}`;
+            }
+
+            const response = await fetch(`/api${url}`, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null,
+            });
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                data = {};
+            }
+
+            if (!response.ok) {
+                throw new Error(data.error || 'No se pudo completar la accion');
+            }
+
+            return data;
+        }
+
+        async function logoutHandler() {
+            localStorage.removeItem('tm_token');
+            localStorage.removeItem('tm_user');
+            state.token = null;
+            state.user = null;
+            window.location.href = '/';
+        }
+
+        function setTopbarUi() {
+            if (state.user) {
+                sessionMenuButton.textContent = state.user.name || 'Usuario';
+                sessionMenuButton.classList.remove('hidden');
+                cartTopButton.classList.remove('hidden');
+                loginButton.classList.add('hidden');
+                registerButton.classList.add('hidden');
+            } else {
+                sessionMenuButton.textContent = 'Sin sesion activa';
+                sessionMenuButton.classList.add('hidden');
+                cartTopButton.classList.add('hidden');
+                loginButton.classList.remove('hidden');
+                registerButton.classList.remove('hidden');
+                closeSessionMenu();
+            }
+        }
+
+        async function deleteAccount() {
+            const password = document.getElementById('deletePassword').value;
+            const confirmText = document.getElementById('deleteConfirmText').value;
+
+            if (!password) {
+                notify('Ingresa tu contraseña', 'err');
+                return;
+            }
+
+            if (String(confirmText || '').trim().toUpperCase() !== 'ELIMINAR') {
+                notify('Debes escribir ELIMINAR para confirmar', 'err');
+                return;
+            }
+
+            const ok = window.confirm('Esta accion eliminara tu cuenta de forma permanente. Deseas continuar?');
+            if (!ok) {
+                return;
+            }
+
+            try {
+                await apiCall('DELETE', '/auth/me', {
+                    password,
+                    confirm_text: confirmText,
+                });
+                notify('Cuenta eliminada correctamente', 'ok');
+                localStorage.removeItem('tm_token');
+                localStorage.removeItem('tm_user');
+                window.location.href = '/';
+            } catch (err) {
+                notify(err.message, 'err');
+            }
+        }
+
+        function init() {
+            state.user = parseUserFromToken(state.token);
+            if (!state.token || !state.user) {
+                notify('Inicia sesion para ver configuraciones', 'info');
+                window.location.href = '/';
+                return;
+            }
+
+            setTopbarUi();
+
+            sessionMenuButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleSessionMenu();
+            });
+
+            settingsMenuButton.addEventListener('click', () => {
+                closeSessionMenu();
+            });
+
+            logoutMenuButton.addEventListener('click', async () => {
+                await logoutHandler();
+            });
+
+            document.getElementById('deleteAccountButton').addEventListener('click', deleteAccount);
+            document.getElementById('cancelDeleteButton').addEventListener('click', () => {
+                window.history.back();
+            });
+
+            loginButton.addEventListener('click', () => {
+                window.location.href = '/';
+            });
+
+            registerButton.addEventListener('click', () => {
+                window.location.href = '/';
+            });
+
+            cartTopButton.addEventListener('click', () => {
+                window.location.href = '/';
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!event.target.closest('.topbar-right')) {
+                    closeSessionMenu();
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
