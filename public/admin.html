@@ -489,7 +489,7 @@
 
         async function restoreSession() {
             if (!state.token) {
-                setAuthUi();
+                window.location.replace('/');
                 return;
             }
 
@@ -516,6 +516,8 @@
                 localStorage.removeItem('tm_user');
                 state.token = null;
                 state.user = null;
+                window.location.replace('/');
+                return;
             }
             setAuthUi();
             if (syncRoleRoute()) {

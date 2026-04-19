@@ -450,9 +450,11 @@
 
                 card.innerHTML = `
                     ${imageHtml}
-                    <h3>${event.name}</h3>
-                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
-                    ${managerControls}
+                    <div class="event-card-body">
+                        <h3>${event.name}</h3>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}</p>
+                        ${managerControls}
+                    </div>
                 `;
 
                 eventsRoot.appendChild(card);
