@@ -385,7 +385,7 @@ async function buildTicketPdfBuffer(ticket) {
         <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(ticket.name || 'Evento')}" class="generated-ticket-image">
       </div>
       <div class="generated-ticket-content">
-        <p class="generated-ticket-kicker">Ticketmaster</p>
+        <p class="generated-ticket-kicker">Ticket's</p>
         <h3>${escapeHtml(ticket.name || 'Evento')}</h3>
         <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
         <div class="generated-ticket-meta">
@@ -450,7 +450,7 @@ async function buildBulkTicketsPdfBuffer(tickets) {
               <img src="${escapeAttribute(eventImage)}" alt="${escapeAttribute(ticket.name || 'Evento')}" class="generated-ticket-image">
             </div>
             <div class="generated-ticket-content">
-              <p class="generated-ticket-kicker">Ticketmaster</p>
+              <p class="generated-ticket-kicker">Ticket's</p>
               <h3>${escapeHtml(ticket.name || 'Evento')}</h3>
               <p class="generated-ticket-subtitle">${escapeHtml(dateTimeLocation)}</p>
               <div class="generated-ticket-meta">

@@ -969,7 +969,7 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
           </tbody>
         </table>
         ${trendSectionsHtml}
-        <div class="footer">Reporte generado por Ticketmaster Clone.</div>
+        <div class="footer">Reporte generado por Ticket's.</div>
       </body>
       </html>
     `;
