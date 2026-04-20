@@ -10,7 +10,11 @@ const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 function isStripeSecretKeyValid(value) {
-  return /^sk_(test|live)_/.test(String(value || '').trim());
+  return /^sk_test_/.test(String(value || '').trim());
+}
+
+function isStripeLiveKey(value) {
+  return /^sk_live_/.test(String(value || '').trim());
 }
 
 let seatsSupportChecked = false;
@@ -44,6 +48,11 @@ function normalizeEmail(email) {
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+}
+
+function isPublicImageUrl(url) {
+  const value = String(url || '').trim();
+  return /^https?:\/\//i.test(value);
 }
 
 function isNoSeatType(typeName) {
@@ -115,6 +124,7 @@ function buildStripeLineItem(item, ticketType, event) {
   const seatLabels = Array.isArray(item.seatLabels) ? item.seatLabels : [];
   const seatText = seatLabels.length ? `Asientos: ${seatLabels.join(', ')}` : 'Asientos asignados automaticamente';
   const description = `${event.name} · ${ticketType.type_name} · ${seatText}`;
+  const imageUrl = isPublicImageUrl(event.image_url) ? String(event.image_url).trim() : null;
 
   return {
     price_data: {
@@ -123,7 +133,7 @@ function buildStripeLineItem(item, ticketType, event) {
       product_data: {
         name: `${event.name} - ${ticketType.type_name}`,
         description,
-        images: event.image_url ? [event.image_url] : undefined,
+        images: imageUrl ? [imageUrl] : undefined,
       },
     },
     quantity: Number(item.quantity || 1),
@@ -344,13 +354,23 @@ async function finalizePendingPayment(paymentRow, stripeSession) {
 }
 
 router.post('/create-checkout-session', auth, async (req, res) => {
-  if (!stripe) {
+  if (!stripeSecretKey) {
     return res.status(500).json({ error: 'Stripe no esta configurado en el servidor' });
   }
 
+  if (isStripeLiveKey(stripeSecretKey)) {
+    return res.status(400).json({
+      error: 'Solo se permite Stripe en modo prueba (sk_test). No se aceptan llaves live.',
+    });
+  }
+
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe no pudo inicializarse en el servidor' });
+  }
+
   if (!isStripeSecretKeyValid(stripeSecretKey)) {
-    return res.status(500).json({
-      error: 'STRIPE_SECRET_KEY invalida. Debe iniciar con sk_test_ o sk_live_.',
+    return res.status(400).json({
+      error: 'STRIPE_SECRET_KEY invalida para pruebas. Debe iniciar con sk_test_.',
     });
   }
 
