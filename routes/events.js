@@ -385,6 +385,126 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+function formatTrendPointLabel(periodStart, bucket) {
+  const date = new Date(periodStart);
+  if (Number.isNaN(date.getTime())) {
+    return String(periodStart || '');
+  }
+
+  if (bucket === 'day') {
+    return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+  }
+
+  if (bucket === 'week') {
+    const end = new Date(date);
+    end.setUTCDate(date.getUTCDate() + 6);
+    const startLabel = date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+    const endLabel = end.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+    return `${startLabel} - ${endLabel}`;
+  }
+
+  if (bucket === 'month') {
+    return date.toLocaleDateString('es-MX', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  return String(date.getUTCFullYear());
+}
+
+function buildTrendChartSvg(rows, bucket, title) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const labels = safeRows.map((row) => String(row.period_label || formatTrendPointLabel(row.period_start, bucket)));
+  const tickets = safeRows.map((row) => Number(row.tickets_sold || 0));
+  const income = safeRows.map((row) => Number(row.total_income || 0));
+  const width = 760;
+  const height = 300;
+  const pad = { top: 44, right: 36, bottom: 72, left: 48 };
+  const chartW = Math.max(width - pad.left - pad.right, 1);
+  const chartH = Math.max(height - pad.top - pad.bottom, 1);
+  const points = Math.max(labels.length, 1);
+  const maxIncome = Math.max(...income, 1) * 1.2;
+  const maxTickets = Math.max(...tickets, 1) * 1.2;
+  const getX = (index) => pad.left + (points === 1 ? chartW / 2 : (chartW * index) / (points - 1));
+  const getIncomeY = (value) => pad.top + chartH - (Math.max(value, 0) / maxIncome) * chartH;
+  const getTicketsY = (value) => pad.top + chartH - (Math.max(value, 0) / maxTickets) * chartH;
+  const labelStep = Math.ceil(Math.max(labels.length, 1) / 4);
+
+  const gridLines = Array.from({ length: 5 }, (_, index) => {
+    const y = pad.top + (chartH / 4) * index;
+    return `<line x1="${pad.left}" y1="${y}" x2="${pad.left + chartW}" y2="${y}" stroke="#eadfcb" stroke-width="1" />`;
+  }).join('');
+
+  const incomePath = income.map((value, index) => {
+    const x = getX(index);
+    const y = getIncomeY(value);
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+  const ticketsPath = tickets.map((value, index) => {
+    const x = getX(index);
+    const y = getTicketsY(value);
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+
+  const pointLabels = labels.map((label, index) => {
+    const x = getX(index);
+    const incomeY = getIncomeY(income[index] || 0);
+    const ticketsY = getTicketsY(tickets[index] || 0);
+    const axisY = pad.top + chartH + 22;
+    const showAxisLabel = (index % labelStep === 0) || index === labels.length - 1;
+    const incomeValue = `$${Number(income[index] || 0).toFixed(2)}`;
+    const ticketsValue = `${Number(tickets[index] || 0)} b`;
+    return `
+      <circle cx="${x}" cy="${incomeY}" r="3" fill="#d46920" />
+      <circle cx="${x}" cy="${ticketsY}" r="3" fill="#2472c8" />
+      <text x="${x}" y="${incomeY - 10}" text-anchor="middle" font-size="10" fill="#9c4d17">${escapeHtml(incomeValue)}</text>
+      <text x="${x}" y="${ticketsY + 14}" text-anchor="middle" font-size="10" fill="#1f5fa8">${escapeHtml(ticketsValue)}</text>
+      ${showAxisLabel ? `<text x="${x}" y="${axisY}" text-anchor="middle" font-size="10" fill="#5f584b">${escapeHtml(label)}</text>` : ''}
+    `;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" width="100%" height="300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escapeHtml(title)}">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#fffdf8" />
+      ${gridLines}
+      <text x="${pad.left}" y="24" font-size="13" font-weight="700" fill="#1d1a13">${escapeHtml(title)}</text>
+      <path d="${incomePath}" fill="none" stroke="#d46920" stroke-width="2.2" />
+      <path d="${ticketsPath}" fill="none" stroke="#2472c8" stroke-width="2.2" stroke-dasharray="6 4" />
+      ${pointLabels}
+      <g transform="translate(${pad.left}, ${height - 22})">
+        <circle cx="0" cy="0" r="4" fill="#d46920" />
+        <text x="10" y="4" font-size="11" fill="#6a6355">Ingresos</text>
+        <circle cx="90" cy="0" r="4" fill="#2472c8" />
+        <text x="100" y="4" font-size="11" fill="#6a6355">Boletos</text>
+      </g>
+    </svg>
+  `;
+}
+
+function formatSingleTrendPeriodLabel(row, bucket, index, mode = 'table') {
+  const startLabelDay = formatTrendPointLabel(row?.period_start, 'day');
+  const endLabelDay = row?.period_end ? formatTrendPointLabel(row.period_end, 'day') : startLabelDay;
+
+  if (bucket === 'day') {
+    return startLabelDay;
+  }
+
+  if (bucket === 'week') {
+    return startLabelDay;
+  }
+
+  if (bucket === 'month') {
+    if (mode === 'chart') {
+      return `Sem ${Number(index || 0) + 1}`;
+    }
+    return `Semana ${Number(index || 0) + 1} (${startLabelDay} - ${endLabelDay})`;
+  }
+
+  if (bucket === 'year') {
+    return formatTrendPointLabel(row?.period_start, 'month');
+  }
+
+  return startLabelDay;
+}
+
 async function buildEventAdminReport(eventId, options = {}) {
   await ensureTicketCreatedAtSupport();
 
@@ -436,6 +556,179 @@ async function buildEventAdminReport(eventId, options = {}) {
       year: yearTrend,
     },
   };
+}
+
+async function getSingleTrendDetailRows(eventId, bucket, offset = 0) {
+  await ensureTicketCreatedAtSupport();
+  const safeOffset = Number.isInteger(Number(offset)) ? Number(offset) : 0;
+
+  if (bucket === 'day') {
+    const query = `
+      WITH bounds AS (
+        SELECT date_trunc('day', NOW()) - INTERVAL '1 day' * $2 AS day_start
+      ),
+      sales AS (
+        SELECT
+          date_trunc('day', COALESCE(t.created_at, NOW())) AS period_start,
+          COUNT(*)::int AS tickets_sold,
+          COALESCE(SUM(tt.price), 0)::numeric AS total_income
+        FROM tickets t
+        JOIN ticket_types tt ON tt.id = t.ticket_type_id
+        WHERE tt.event_id = $1
+        GROUP BY 1
+      )
+      SELECT
+        b.day_start AS period_start,
+        COALESCE(s.tickets_sold, 0)::int AS tickets_sold,
+        COALESCE(s.total_income, 0)::numeric AS total_income
+      FROM bounds b
+      LEFT JOIN sales s ON s.period_start = b.day_start
+    `;
+    const result = await pool.query(query, [eventId, safeOffset]);
+    return (result.rows || []).map((row) => ({
+      period_start: row.period_start,
+      period_end: row.period_start,
+      tickets_sold: Number(row.tickets_sold || 0),
+      total_income: Number(row.total_income || 0),
+    }));
+  }
+
+  if (bucket === 'week') {
+    const query = `
+      WITH bounds AS (
+        SELECT date_trunc('week', NOW()) - INTERVAL '1 week' * $2 AS week_start
+      ),
+      series AS (
+        SELECT generate_series(
+          (SELECT week_start FROM bounds),
+          (SELECT week_start FROM bounds) + INTERVAL '6 day',
+          INTERVAL '1 day'
+        ) AS period_start
+      ),
+      sales AS (
+        SELECT
+          date_trunc('day', COALESCE(t.created_at, NOW())) AS period_start,
+          COUNT(*)::int AS tickets_sold,
+          COALESCE(SUM(tt.price), 0)::numeric AS total_income
+        FROM tickets t
+        JOIN ticket_types tt ON tt.id = t.ticket_type_id
+        WHERE tt.event_id = $1
+        GROUP BY 1
+      )
+      SELECT
+        s.period_start,
+        COALESCE(sa.tickets_sold, 0)::int AS tickets_sold,
+        COALESCE(sa.total_income, 0)::numeric AS total_income
+      FROM series s
+      LEFT JOIN sales sa ON sa.period_start = s.period_start
+      ORDER BY s.period_start ASC
+    `;
+    const result = await pool.query(query, [eventId, safeOffset]);
+    return (result.rows || []).map((row) => ({
+      period_start: row.period_start,
+      period_end: row.period_start,
+      tickets_sold: Number(row.tickets_sold || 0),
+      total_income: Number(row.total_income || 0),
+    }));
+  }
+
+  if (bucket === 'month') {
+    const query = `
+      WITH bounds AS (
+        SELECT
+          date_trunc('month', NOW()) - INTERVAL '1 month' * $2 AS month_start,
+          date_trunc('month', NOW()) - INTERVAL '1 month' * $2 + INTERVAL '1 month' AS next_month_start
+      ),
+      series AS (
+        SELECT generate_series(
+          (SELECT month_start FROM bounds),
+          (SELECT next_month_start FROM bounds) - INTERVAL '1 day',
+          INTERVAL '7 day'
+        ) AS period_start
+      ),
+      periods AS (
+        SELECT
+          s.period_start,
+          LEAST(s.period_start + INTERVAL '6 day', b.next_month_start - INTERVAL '1 day') AS period_end
+        FROM series s
+        CROSS JOIN bounds b
+      ),
+      sales AS (
+        SELECT
+          p.period_start,
+          p.period_end,
+          COUNT(t.id)::int AS tickets_sold,
+          COALESCE(SUM(CASE WHEN t.id IS NOT NULL THEN tt.price ELSE 0 END), 0)::numeric AS total_income
+        FROM periods p
+        LEFT JOIN ticket_types tt ON tt.event_id = $1
+        LEFT JOIN tickets t
+          ON t.ticket_type_id = tt.id
+         AND COALESCE(t.created_at, NOW()) >= p.period_start
+         AND COALESCE(t.created_at, NOW()) < (p.period_end + INTERVAL '1 day')
+        GROUP BY p.period_start, p.period_end
+      )
+      SELECT
+        sa.period_start,
+        sa.period_end,
+        COALESCE(sa.tickets_sold, 0)::int AS tickets_sold,
+        COALESCE(sa.total_income, 0)::numeric AS total_income
+      FROM sales sa
+      ORDER BY sa.period_start ASC
+    `;
+    const result = await pool.query(query, [eventId, safeOffset]);
+    return (result.rows || []).map((row) => ({
+      period_start: row.period_start,
+      period_end: row.period_end,
+      tickets_sold: Number(row.tickets_sold || 0),
+      total_income: Number(row.total_income || 0),
+    }));
+  }
+
+  if (bucket === 'year') {
+    const query = `
+      WITH bounds AS (
+        SELECT
+          date_trunc('year', NOW()) - INTERVAL '1 year' * $2 AS year_start,
+          date_trunc('year', NOW()) - INTERVAL '1 year' * $2 + INTERVAL '1 year' AS next_year_start
+      ),
+      series AS (
+        SELECT generate_series(
+          (SELECT year_start FROM bounds),
+          (SELECT next_year_start FROM bounds) - INTERVAL '1 month',
+          INTERVAL '1 month'
+        ) AS period_start
+      ),
+      sales AS (
+        SELECT
+          date_trunc('month', COALESCE(t.created_at, NOW())) AS period_start,
+          COUNT(*)::int AS tickets_sold,
+          COALESCE(SUM(tt.price), 0)::numeric AS total_income
+        FROM tickets t
+        JOIN ticket_types tt ON tt.id = t.ticket_type_id
+        CROSS JOIN bounds b
+        WHERE tt.event_id = $1
+          AND COALESCE(t.created_at, NOW()) >= b.year_start
+          AND COALESCE(t.created_at, NOW()) < b.next_year_start
+        GROUP BY 1
+      )
+      SELECT
+        s.period_start,
+        COALESCE(sa.tickets_sold, 0)::int AS tickets_sold,
+        COALESCE(sa.total_income, 0)::numeric AS total_income
+      FROM series s
+      LEFT JOIN sales sa ON sa.period_start = s.period_start
+      ORDER BY s.period_start ASC
+    `;
+    const result = await pool.query(query, [eventId, safeOffset]);
+    return (result.rows || []).map((row) => ({
+      period_start: row.period_start,
+      period_end: row.period_start,
+      tickets_sold: Number(row.tickets_sold || 0),
+      total_income: Number(row.total_income || 0),
+    }));
+  }
+
+  return [];
 }
 
 router.get('/admin/overview', auth, async (req, res) => {
@@ -514,8 +807,11 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
   }
 
   try {
+    const requestedBucket = String(req.query.bucket || 'day').toLowerCase();
+    const singleTrend = String(req.query.singleTrend || '0').toLowerCase() === '1'
+      || String(req.query.singleTrend || '').toLowerCase() === 'true';
     const report = await buildEventAdminReport(id, {
-      bucket: String(req.query.bucket || 'day').toLowerCase(),
+      bucket: requestedBucket,
       offset: Number(req.query.offset || 0),
     });
     if (!report) {
@@ -546,6 +842,82 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
     const totalIncome = Number(report.total_income || 0);
     const artistFee = Number(event.artist_fee || 0);
     const balance = totalIncome - artistFee;
+    const generatedAt = new Date().toLocaleString('es-MX', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'America/Mexico_City',
+    });
+    const trendBuckets = [
+      { key: 'day', title: 'Grafica diaria' },
+      { key: 'week', title: 'Grafica semanal' },
+      { key: 'month', title: 'Grafica mensual' },
+      { key: 'year', title: 'Grafica anual' },
+    ];
+    const selectedTrendBuckets = singleTrend
+      ? trendBuckets.filter((bucketInfo) => bucketInfo.key === requestedBucket)
+      : trendBuckets;
+    const trendSections = await Promise.all(selectedTrendBuckets.map(async (bucketInfo) => {
+      const requestOffset = Number(req.query.offset || 0);
+      const bucketOffset = bucketInfo.key === requestedBucket ? requestOffset : 0;
+      const detailRows = await getSingleTrendDetailRows(id, bucketInfo.key, bucketOffset);
+
+      const detailRowsLabeled = detailRows.map((row, index) => ({
+        ...row,
+        period_label_chart: formatSingleTrendPeriodLabel(row, bucketInfo.key, index, 'chart'),
+        period_label_table: formatSingleTrendPeriodLabel(row, bucketInfo.key, index, 'table'),
+      }));
+
+      const chartRows = detailRowsLabeled.map((row) => ({ ...row, period_label: row.period_label_chart }));
+
+      const labelBucket = bucketInfo.key === 'week'
+        ? 'day'
+        : bucketInfo.key === 'month'
+          ? 'week'
+          : bucketInfo.key === 'year'
+            ? 'month'
+            : 'day';
+
+      const labelRows = chartRows.length ? chartRows : detailRowsLabeled;
+      const firstLabel = labelRows.length ? formatTrendPointLabel(labelRows[0].period_start, labelBucket) : 'Sin datos';
+      const lastLabel = labelRows.length ? formatTrendPointLabel(labelRows[labelRows.length - 1].period_start, labelBucket) : 'Sin datos';
+      const chartTitle = `${bucketInfo.title} | ${event.name || 'Evento'} | ${eventDate}${eventTime} | ${generatedAt}`;
+      const chartSvg = buildTrendChartSvg(chartRows, labelBucket, chartTitle);
+
+      const tableRows = detailRowsLabeled;
+
+      const pointRows = tableRows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.period_label_table || formatTrendPointLabel(row.period_start, labelBucket))}</td>
+          <td>${Number(row.tickets_sold || 0)}</td>
+          <td>$${Number(row.total_income || 0).toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      return `
+        <section class="trend-section">
+          <h3>${escapeHtml(`${bucketInfo.title} (${firstLabel} a ${lastLabel})`)}</h3>
+          <div class="chart-wrap">${chartSvg}</div>
+          <table class="points-table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Boletos</th>
+                <th>Ingresos</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pointRows || '<tr><td colspan="3">Sin ventas registradas en este periodo</td></tr>'}
+            </tbody>
+          </table>
+        </section>
+      `;
+    }));
+    const trendSectionsHtml = trendSections.join('');
 
     const html = `
       <!DOCTYPE html>
@@ -555,6 +927,7 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
         <style>
           body { font-family: Arial, sans-serif; color: #111; padding: 28px; }
           h1 { margin: 0 0 6px; font-size: 24px; }
+          h3 { margin: 0 0 8px; font-size: 15px; }
           .muted { color: #666; font-size: 12px; margin-bottom: 14px; }
           .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0 18px; }
           .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
@@ -563,12 +936,16 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
           table { width: 100%; border-collapse: collapse; margin-top: 14px; }
           th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 12px; }
           th { background: #f5f5f5; }
+          .trend-section { margin-top: 22px; page-break-inside: avoid; }
+          .chart-wrap { border: 1px solid #ddd; border-radius: 10px; padding: 8px; background: #fffdf8; }
+          .points-table { margin-top: 10px; }
           .footer { margin-top: 18px; font-size: 12px; color: #555; }
         </style>
       </head>
       <body>
-        <h1>Estado de cuenta del evento</h1>
+        <h1>${singleTrend ? 'Grafica del evento' : 'Estado de cuenta del evento'}</h1>
         <div class="muted">${escapeHtml(event.name || 'Evento')} | ${escapeHtml(`${eventDate}${eventTime} | ${event.location || 'Ubicacion por confirmar'}`)} | ${escapeHtml(statusLabel)}</div>
+        <div class="muted">Fecha de generacion del reporte: ${escapeHtml(generatedAt)}</div>
         <div class="summary">
           <div class="card"><span>Boletos vendidos</span><strong>${Number(report.total_tickets_sold || 0)}</strong></div>
           <div class="card"><span>Boletos no vendidos</span><strong>${Number(report.tickets_unsold || 0)}</strong></div>
@@ -591,6 +968,7 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
             ${htmlRows || '<tr><td colspan="5">Sin tipos de boleto</td></tr>'}
           </tbody>
         </table>
+        ${trendSectionsHtml}
         <div class="footer">Reporte generado por Ticketmaster Clone.</div>
       </body>
       </html>
@@ -603,7 +981,11 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
       const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '18mm', right: '14mm', bottom: '18mm', left: '14mm' } });
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="reporte-evento-${escapeHtml(event.name || 'evento').replace(/[^a-zA-Z0-9_-]+/g, '-')}.pdf"`);
+      const cleanName = escapeHtml(event.name || 'evento').replace(/[^a-zA-Z0-9_-]+/g, '-');
+      const filename = singleTrend
+        ? `grafica-${requestedBucket}-evento-${cleanName}.pdf`
+        : `reporte-evento-${cleanName}.pdf`;
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.send(pdfBuffer);
     } finally {
       await browser.close();

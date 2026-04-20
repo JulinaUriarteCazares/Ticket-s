@@ -638,22 +638,96 @@
             }
 
             if (bucket === 'day') {
-                return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+                return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
             }
 
             if (bucket === 'week') {
                 const end = new Date(date);
-                end.setDate(date.getDate() + 6);
-                const startLabel = date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-                const endLabel = end.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+                end.setUTCDate(date.getUTCDate() + 6);
+                const startLabel = date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+                const endLabel = end.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', timeZone: 'UTC' });
                 return `${startLabel} - ${endLabel}`;
             }
 
             if (bucket === 'month') {
-                return date.toLocaleDateString('es-MX', { month: 'short', year: 'numeric' });
+                return date.toLocaleDateString('es-MX', { month: 'short', year: 'numeric', timeZone: 'UTC' });
             }
 
-            return date.toLocaleDateString('es-MX', { year: 'numeric' });
+            return String(date.getUTCFullYear());
+        }
+
+        function ensureAdminTrendTooltip() {
+            let tooltip = document.getElementById('adminTrendTooltip');
+            if (tooltip) {
+                return tooltip;
+            }
+
+            tooltip = document.createElement('div');
+            tooltip.id = 'adminTrendTooltip';
+            tooltip.style.position = 'fixed';
+            tooltip.style.zIndex = '9999';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.padding = '8px 10px';
+            tooltip.style.borderRadius = '10px';
+            tooltip.style.border = '1px solid #d7cfbe';
+            tooltip.style.background = '#fffdf8';
+            tooltip.style.color = '#1e2530';
+            tooltip.style.font = '12px Trebuchet MS, Segoe UI, sans-serif';
+            tooltip.style.boxShadow = '0 8px 20px rgba(19, 24, 38, 0.16)';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+            return tooltip;
+        }
+
+        function bindTrendCanvasHover(canvas) {
+            if (!canvas || canvas.dataset.hoverBound === 'true') {
+                return;
+            }
+
+            const tooltip = ensureAdminTrendTooltip();
+
+            canvas.addEventListener('mousemove', (event) => {
+                const hitData = canvas.__trendHitData;
+                if (!hitData || !Array.isArray(hitData.points) || !hitData.points.length) {
+                    tooltip.style.display = 'none';
+                    return;
+                }
+
+                const rect = canvas.getBoundingClientRect();
+                const localX = event.clientX - rect.left;
+                const localY = event.clientY - rect.top;
+
+                let nearest = null;
+                hitData.points.forEach((point) => {
+                    const dx = point.x - localX;
+                    const dyIncome = point.incomeY - localY;
+                    const dyTickets = point.ticketsY - localY;
+                    const distIncome = Math.sqrt(dx * dx + dyIncome * dyIncome);
+                    const distTickets = Math.sqrt(dx * dx + dyTickets * dyTickets);
+                    const dist = Math.min(distIncome, distTickets);
+
+                    if (!nearest || dist < nearest.dist) {
+                        nearest = { point, dist };
+                    }
+                });
+
+                if (!nearest || nearest.dist > 26) {
+                    tooltip.style.display = 'none';
+                    return;
+                }
+
+                const point = nearest.point;
+                tooltip.innerHTML = `<strong>${point.label}</strong><br>Boletos: ${Number(point.tickets || 0)}<br>Ingresos: $${Number(point.income || 0).toFixed(2)}`;
+                tooltip.style.left = `${event.clientX + 12}px`;
+                tooltip.style.top = `${event.clientY + 12}px`;
+                tooltip.style.display = 'block';
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+
+            canvas.dataset.hoverBound = 'true';
         }
 
         function normalizeTrendRows(rows, bucket) {
@@ -728,7 +802,7 @@
             return next;
         }
 
-        function drawTrendCanvas(canvas, trendData) {
+        function drawTrendCanvas(canvas, trendData, options = {}) {
             if (!canvas) {
                 return;
             }
@@ -738,8 +812,8 @@
                 return;
             }
 
-            const cssWidth = canvas.clientWidth || 320;
-            const cssHeight = canvas.clientHeight || 220;
+            const cssWidth = Number(options.width || canvas.clientWidth || 320);
+            const cssHeight = Number(options.height || canvas.clientHeight || 220);
             const dpr = window.devicePixelRatio || 1;
             canvas.width = Math.floor(cssWidth * dpr);
             canvas.height = Math.floor(cssHeight * dpr);
@@ -773,6 +847,25 @@
             const getX = (index) => pad.left + (points === 1 ? chartW / 2 : (chartW * index) / (points - 1));
             const getIncomeY = (value) => pad.top + chartH - (Math.max(value, 0) / maxIncome) * chartH;
             const getTicketsY = (value) => pad.top + chartH - (Math.max(value, 0) / maxTickets) * chartH;
+            const hitPoints = labels.map((label, index) => ({
+                label,
+                x: getX(index),
+                incomeY: getIncomeY(income[index] || 0),
+                ticketsY: getTicketsY(tickets[index] || 0),
+                income: Number(income[index] || 0),
+                tickets: Number(tickets[index] || 0),
+            }));
+
+            canvas.__trendHitData = { points: hitPoints };
+            bindTrendCanvasHover(canvas);
+
+            const annotatePoints = Boolean(options.annotatePoints);
+
+            if (options.chartTitle) {
+                ctx.fillStyle = '#322a1d';
+                ctx.font = 'bold 14px Trebuchet MS, Segoe UI, sans-serif';
+                ctx.fillText(String(options.chartTitle), pad.left, 18);
+            }
 
             if (income.length) {
                 ctx.strokeStyle = '#d46920';
@@ -796,6 +889,14 @@
                     ctx.beginPath();
                     ctx.arc(x, y, 2.8, 0, Math.PI * 2);
                     ctx.fill();
+
+                    if (annotatePoints) {
+                        ctx.font = '11px Trebuchet MS, Segoe UI, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = '#9c4d17';
+                        ctx.fillText(`$${Number(value || 0).toFixed(2)}`, x, y - 10);
+                        ctx.fillStyle = '#d46920';
+                    }
                 });
             }
 
@@ -823,6 +924,14 @@
                     ctx.beginPath();
                     ctx.arc(x, y, 2.8, 0, Math.PI * 2);
                     ctx.fill();
+
+                    if (annotatePoints) {
+                        ctx.font = '11px Trebuchet MS, Segoe UI, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = '#1f5fa8';
+                        ctx.fillText(`${Number(value || 0)} b`, x, y + 14);
+                        ctx.fillStyle = '#2472c8';
+                    }
                 });
             }
 
@@ -837,6 +946,7 @@
                 ctx.save();
                 ctx.translate(x, pad.top + chartH + 16);
                 ctx.rotate(-0.22);
+                ctx.textAlign = 'left';
                 ctx.fillText(label, -18, 0);
                 ctx.restore();
             });
@@ -884,13 +994,48 @@
             });
         }
 
-        function downloadSingleTrendChart(bucket = state.currentTrendBucket) {
-            const canvas = state.adminReportCanvases?.main;
-            if (!canvas) {
+        async function downloadSingleTrendChart(bucket = state.currentTrendBucket) {
+            if (!isAdmin()) {
+                notify('No autorizado para descargar esta grafica', 'err');
+                return;
+            }
+
+            const normalizedBucket = String(bucket || state.currentTrendBucket || 'day').toLowerCase();
+            if (!state.adminTrendSeries?.[normalizedBucket]) {
                 notify('No se encontro la grafica solicitada', 'err');
                 return;
             }
-            downloadCanvasPng(canvas, `grafica-${bucket}-evento-${state.eventId}.png`);
+
+            try {
+                const offset = Number(state.trendOffsets[normalizedBucket] || 0);
+                const response = await fetch(`/api/events/${state.eventId}/admin-report/pdf?bucket=${encodeURIComponent(normalizedBucket)}&offset=${encodeURIComponent(offset)}&singleTrend=1`, {
+                    method: 'GET',
+                    headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'No se pudo generar el PDF de la grafica';
+                    try {
+                        const data = await response.json();
+                        errorMessage = data.error || errorMessage;
+                    } catch (err) {
+                        // ignore
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `grafica-${normalizedBucket}-evento-${state.eventId}.pdf`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                notify(err.message, 'err');
+            }
         }
 
         async function downloadAllAdminEventAssets() {
@@ -899,16 +1044,7 @@
                 return;
             }
 
-            const previousBucket = state.currentTrendBucket;
             await downloadAdminEventReportPdf();
-
-            for (const bucket of ['day', 'week', 'month', 'year']) {
-                renderAdminTrendChart(bucket);
-                await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
-                downloadSingleTrendChart(bucket);
-            }
-
-            renderAdminTrendChart(previousBucket);
         }
 
         function canUseCheckoutAsViewer() {
