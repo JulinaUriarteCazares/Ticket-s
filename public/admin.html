@@ -872,18 +872,6 @@
             window.location.href = '/admin-users.html';
         });
 
-        loginModal.addEventListener('click', (event) => {
-            if (event.target === loginModal) {
-                closeLoginModal();
-            }
-        });
-
-        registerModal.addEventListener('click', (event) => {
-            if (event.target === registerModal) {
-                closeRegisterModal();
-            }
-        });
-
         adminInsightsRoot.addEventListener('click', (event) => {
             const card = event.target.closest('[data-event-open]');
             if (!card) {

@@ -152,18 +152,6 @@
         openLoginModal();
     });
 
-    loginModal.addEventListener('click', (event) => {
-        if (event.target === loginModal) {
-            closeLoginModal();
-        }
-    });
-
-    registerModal.addEventListener('click', (event) => {
-        if (event.target === registerModal) {
-            closeRegisterModal();
-        }
-    });
-
     window.openLoginModal = openLoginModal;
     window.closeLoginModal = closeLoginModal;
     window.openRegisterModal = openRegisterModal;

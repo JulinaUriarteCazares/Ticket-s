@@ -1134,24 +1134,6 @@
             await loadAdminInsights();
         });
 
-        loginModal.addEventListener('click', (event) => {
-            if (event.target === loginModal) {
-                closeLoginModal();
-            }
-        });
-
-        registerModal.addEventListener('click', (event) => {
-            if (event.target === registerModal) {
-                closeRegisterModal();
-            }
-        });
-
-        boletosModal.addEventListener('click', (event) => {
-            if (event.target === boletosModal) {
-                closeBoletosModal();
-            }
-        });
-
         document.addEventListener('click', (event) => {
             if (!event.target.closest('.topbar-right')) {
                 closeSessionMenu();

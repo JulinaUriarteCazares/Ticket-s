@@ -1971,12 +1971,6 @@
         document.getElementById('checkoutEventCart').addEventListener('click', checkoutEventCart);
 
         eventEditorModal.addEventListener('click', (event) => {
-            if (event.target === eventEditorModal) {
-                closeEventEditorModal();
-            }
-        });
-
-        eventEditorModal.addEventListener('click', (event) => {
             const lockButton = event.target.closest('[data-lock-target]');
             if (!lockButton) {
                 return;
@@ -1989,12 +1983,6 @@
             }
 
             setFieldLocked(fieldId, !targetField.disabled);
-        });
-
-        ticketEditorModal.addEventListener('click', (event) => {
-            if (event.target === ticketEditorModal) {
-                closeTicketEditorModal();
-            }
         });
 
         document.getElementById('ticketTypesBody').addEventListener('click', (event) => {

@@ -903,24 +903,6 @@
             await loadAdminInsights();
         });
 
-        loginModal.addEventListener('click', (event) => {
-            if (event.target === loginModal) {
-                closeLoginModal();
-            }
-        });
-
-        registerModal.addEventListener('click', (event) => {
-            if (event.target === registerModal) {
-                closeRegisterModal();
-            }
-        });
-
-        createEventModal.addEventListener('click', (event) => {
-            if (event.target === createEventModal) {
-                closeCreateEventModal();
-            }
-        });
-
         eventsRoot.addEventListener('click', (event) => {
             const card = event.target.closest('[data-event-open]');
             if (!card) {
