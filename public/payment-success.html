@@ -5,153 +5,79 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pago confirmado</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/purchase.css">
   <style>
     body {
-      background: linear-gradient(180deg, #f5efe3 0%, #efe6d7 100%);
+      background: #f4efe3;
     }
-    .payment-success-shell {
-      width: min(920px, calc(100% - 24px));
-      margin: 28px auto 72px;
+    .purchase-main {
+      width: min(1120px, calc(100% - 20px));
+      margin: 22px auto 64px;
     }
-    .payment-success-card {
-      background: #fffdf8;
-      border: 1px solid #ddd4c2;
-      border-radius: 18px;
-      padding: 22px;
-      box-shadow: 0 16px 34px rgba(13, 16, 32, 0.08);
+    .purchase-success-card {
+      max-height: none;
+    }
+    .payment-meta-strip {
       display: grid;
-      gap: 18px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
     }
-    .payment-success-head {
+    .payment-meta-strip div {
+      border: 1px solid #e5ddcd;
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px;
       display: grid;
-      gap: 6px;
+      gap: 2px;
     }
-    .payment-success-head h1 {
-      margin: 0;
-      font-size: clamp(28px, 4vw, 40px);
+    .payment-meta-strip span {
+      font-size: 12px;
+      color: #6c6372;
     }
-    .payment-success-head p {
-      margin: 0;
-      color: #6a6258;
+    .payment-meta-strip strong {
+      color: #1f2430;
     }
-    .payment-status {
+    .payment-status-pill {
       display: inline-flex;
       width: fit-content;
       border-radius: 999px;
-      padding: 8px 12px;
+      padding: 6px 10px;
+      font-size: 12px;
       font-weight: 800;
-      background: #ece5d8;
-      color: #1a1c25;
-    }
-    .payment-status.is-paid {
-      background: #dff5e3;
-      color: #0f5f31;
-    }
-    .payment-status.is-pending {
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       background: #fff1c9;
       color: #8b5c00;
     }
-    .payment-summary-list {
-      display: grid;
-      gap: 10px;
+    .payment-status-pill.is-paid {
+      background: #dff5e3;
+      color: #0f5f31;
     }
-    .payment-item {
-      border: 1px solid #e3dac8;
-      border-radius: 14px;
-      padding: 14px;
-      background: #fff;
+    .payment-summary-list {
+      margin: 0;
+      padding-left: 18px;
       display: grid;
       gap: 4px;
-    }
-    .payment-item strong {
-      font-size: 18px;
-      color: #151822;
-    }
-    .payment-item span,
-    .payment-item small {
-      color: #5f6574;
-    }
-    .payment-meta {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .payment-meta div {
-      border: 1px solid #e5ddcd;
-      border-radius: 12px;
-      padding: 12px;
-      background: #faf7ef;
-    }
-    .payment-meta span {
-      display: block;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #7a7366;
-      margin-bottom: 4px;
+      color: #1f2430;
     }
     .payment-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
     }
-    .payment-ticket-downloads {
-      display: grid;
-      gap: 10px;
-    }
-    .payment-ticket-downloads h2 {
-      margin: 0;
-    }
-    .payment-ticket-grid {
-      display: grid;
-      gap: 10px;
-    }
-    .payment-ticket-row {
-      border: 1px solid #e3dac8;
-      border-radius: 12px;
-      padding: 12px;
-      background: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .payment-ticket-row strong {
-      display: block;
-      color: #151822;
-    }
-    .payment-ticket-row small {
-      color: #5f6574;
-    }
-    .payment-ticket-row button {
-      border: 0;
-      border-radius: 999px;
-      padding: 10px 14px;
-      font-weight: 800;
-      background: #111827;
-      color: #fff;
-      cursor: pointer;
-    }
     .payment-actions button,
     .payment-actions a {
-      border: 0;
-      border-radius: 999px;
-      padding: 12px 16px;
-      font-weight: 800;
+      border: 1px solid #d0c7b6;
+      background: #f3eee3;
+      color: #1f2430;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 700;
       text-decoration: none;
       cursor: pointer;
     }
-    .payment-actions .primary {
-      background: #111827;
-      color: #fff;
-    }
-    .payment-actions .secondary {
-      background: #ece5d8;
-      color: #111827;
-    }
     @media (max-width: 760px) {
-      .payment-meta {
+      .payment-meta-strip {
         grid-template-columns: 1fr;
       }
     }
@@ -170,19 +96,13 @@
     </div>
   </header>
 
-  <main class="payment-success-shell">
-    <section class="payment-success-card">
-      <div class="payment-success-head">
-        <span id="paymentStatusBadge" class="payment-status is-pending">Procesando pago</span>
-        <h1>Pago confirmado en Stripe</h1>
-        <p id="paymentSubtitle">Estamos verificando tu compra y preparando el detalle.</p>
-      </div>
+  <main class="purchase-main">
+    <section class="purchase-success-card">
+      <span id="paymentStatusBadge" class="payment-status-pill">Procesando pago</span>
+      <h2>Tu compra fue exitosa</h2>
+      <p id="purchaseSuccessDetail">Estamos verificando tu compra.</p>
 
-      <div class="payment-meta">
-        <div>
-          <span>Sesión</span>
-          <strong id="paymentSessionId">-</strong>
-        </div>
+      <div class="payment-meta-strip">
         <div>
           <span>Total</span>
           <strong id="paymentTotal">$0.00</strong>
@@ -193,27 +113,59 @@
         </div>
       </div>
 
-      <div>
-        <h2 style="margin:0 0 10px;">Lo que pagaste</h2>
-        <div id="paymentItems" class="payment-summary-list">
-          <div class="payment-item">Cargando detalle de pago...</div>
+      <div id="purchaseTicketsWrap" class="purchase-tickets-wrap hidden">
+        <div class="section-title-row purchase-ticket-head">
+          <div>
+            <h2>Boletos generados</h2>
+            <p class="ticket-summary">Descarga tus boletos con su QR.</p>
+          </div>
+          <div class="section-title-actions">
+            <button id="downloadAllPaidTickets" class="image-btn hidden" type="button">Descargar todos</button>
+          </div>
         </div>
+        <div id="purchaseTicketsGrid" class="purchase-tickets-grid"></div>
       </div>
 
-      <div id="ticketDownloadsSection" class="payment-ticket-downloads" style="display:none;">
-        <div class="payment-actions" style="justify-content:space-between;">
-          <h2>Boletos generados</h2>
-          <button id="downloadAllPaidTickets" class="primary" type="button">Descargar todos</button>
-        </div>
-        <div id="paymentTicketList" class="payment-ticket-grid"></div>
+      <div id="purchaseSuccessSummary" class="purchase-success-summary">
+        <h3>Resumen de tu compra</h3>
+        <ul id="paymentItems" class="payment-summary-list">
+          <li>Cargando detalle de pago...</li>
+        </ul>
+        <p class="purchase-success-total">Total pagado: <strong id="paymentTotalInline">$0.00</strong></p>
       </div>
 
       <div class="payment-actions">
-        <button id="refreshPayment" class="primary" type="button">Actualizar estado</button>
-        <a class="secondary" href="/">Volver al inicio</a>
+        <button id="closePurchaseSuccess" type="button">Continuar</button>
       </div>
     </section>
   </main>
+
+  <template id="ticketCardTemplate">
+    <article class="generated-ticket">
+      <div class="generated-ticket-poster">
+        <img class="generated-ticket-image" src="" alt="Boleto">
+      </div>
+      <div class="generated-ticket-content">
+        <p class="generated-ticket-kicker">Ticketmaster</p>
+        <h3 class="ticket-event-name"></h3>
+        <p class="generated-ticket-subtitle ticket-event-subtitle"></p>
+        <p class="generated-ticket-description ticket-event-artist"></p>
+        <div class="generated-ticket-meta">
+          <div><span>Tipo</span><strong class="ticket-type-name"></strong></div>
+          <div><span>Asiento</span><strong class="ticket-seat-number"></strong></div>
+          <div><span>Precio</span><strong class="ticket-price"></strong></div>
+          <div><span>Estado</span><strong class="ticket-status">Confirmado</strong></div>
+        </div>
+      </div>
+      <div class="generated-ticket-qr">
+        <div class="generated-ticket-qr-box qr-container"></div>
+        <p>Escanea para validar</p>
+        <div class="generated-ticket-actions">
+          <button type="button" class="download-single">Descargar</button>
+        </div>
+      </div>
+    </article>
+  </template>
 
   <script src="/payment-success.js"></script>
 </body>

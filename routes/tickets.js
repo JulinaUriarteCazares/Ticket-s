@@ -774,6 +774,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
 
     const supportsSeats = await ensureSeatsSupport();
     let seats = [];
+    let occupiedSeatLabels = new Set();
 
     if (supportsSeats) {
       await cleanupExpiredSeatReservations(client);
@@ -783,8 +784,10 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         `SELECT seat_label, row_label, column_label, status
          FROM seats
          WHERE ticket_type_id = $1
-           AND status = 'available'
-         ORDER BY row_label, column_label`,
+         ORDER BY
+           COALESCE(NULLIF(regexp_replace(COALESCE(row_label, ''), '\\D', '', 'g'), ''), '0')::int,
+           COALESCE(NULLIF(regexp_replace(COALESCE(column_label, ''), '\\D', '', 'g'), ''), '0')::int,
+           seat_label`,
         [ticketTypeId]
       );
 
@@ -792,6 +795,18 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         ...seat,
         section_label: String(seat.row_label || '').split('-')[0] || String(seat.seat_label || '').split('-')[0] || 'NM',
       }));
+
+      const occupiedResult = await client.query(
+        `SELECT seat_number
+         FROM tickets
+         WHERE ticket_type_id = $1`,
+        [ticketTypeId]
+      );
+      occupiedSeatLabels = new Set(
+        occupiedResult.rows
+          .map((row) => String(row.seat_number || '').trim().toUpperCase())
+          .filter(Boolean)
+      );
     }
 
     if (!seats.length) {
@@ -802,14 +817,17 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         [ticketTypeId]
       );
       const occupied = new Set(soldResult.rows.map((row) => String(row.seat_number || '').trim()).filter(Boolean));
-      seats = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupied)
-        .filter((seat) => seat.status === 'available');
+      seats = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupied);
+      occupiedSeatLabels = occupied;
     }
 
-    // Keep seat list aligned with remaining inventory even if legacy sales did not update seats table.
-    const remainingInventory = Math.max(Number(ticketType.capacity || 0) - Number(ticketType.sold || 0), 0);
-    if (seats.length > remainingInventory) {
-      seats = seats.slice(0, remainingInventory);
+    if (supportsSeats) {
+      const fullLayout = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupiedSeatLabels);
+      const seatMap = new Map(seats.map((seat) => [String(seat.seat_label || '').trim().toUpperCase(), seat]));
+      seats = fullLayout.map((seat) => {
+        const existing = seatMap.get(String(seat.seat_label || '').trim().toUpperCase());
+        return existing ? { ...seat, ...existing } : seat;
+      });
     }
 
     seats = rebalanceSeatGridForDisplay(seats, ticketType.type_name);
@@ -1060,6 +1078,39 @@ router.get('/:ticketId/pdf', auth, async (req, res) => {
     res.send(pdfBuffer);
   } catch (err) {
     console.error('PDF Generation Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:ticketId/qr-svg', auth, async (req, res) => {
+  const { ticketId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.qr_code, t.user_id
+       FROM tickets t
+       WHERE t.id = $1`,
+      [ticketId]
+    );
+
+    const ticket = result.rows[0];
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket no encontrado' });
+    }
+
+    if (req.user.role !== 'admin' && String(ticket.user_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const qrSvg = await QRCode.toString(ticket.qr_code, {
+      type: 'svg',
+      margin: 1,
+      width: 180,
+      errorCorrectionLevel: 'M'
+    });
+
+    res.json({ ticketId: ticket.id, qrSvg });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

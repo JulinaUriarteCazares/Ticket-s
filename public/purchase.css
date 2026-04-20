@@ -115,6 +115,11 @@
 }
 
 .seat-type-band {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
 	border: 2px solid #d4d9e6;
 	border-radius: 10px;
 	background: #fff;
@@ -208,6 +213,11 @@
 }
 
 .mini-zone {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
 	padding: 10px 10px;
 	display: grid;
 	gap: 2px;
@@ -388,11 +398,11 @@
 }
 
 .seat-btn.is-occupied {
-	background: #d64545;
-	border-color: #d64545;
-	color: #fff;
+	background: #d9dde5;
+	border-color: #d9dde5;
+	color: #5c6470;
 	cursor: not-allowed;
-	opacity: 0.92;
+	opacity: 0.95;
 }
 
 .seat-btn.is-available {

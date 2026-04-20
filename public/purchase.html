@@ -1079,7 +1079,7 @@
         }
 
         function getSeatWizardItemKey(item) {
-            return `${String(item.eventId || '')}::${String(item.ticketTypeId || '')}`;
+            return String(item.wizardId || `${String(item.eventId || '')}::${String(item.ticketTypeId || '')}`);
         }
 
         function requiresSeatSelection(item) {
@@ -1115,22 +1115,111 @@
             };
         }
 
+        function getSeatWizardTicketTypes() {
+            const allowedZones = new Set(['platino', 'vip', 'numerado']);
+            const uniqueByZone = new Map();
+
+            (state.event?.ticketTypes || [])
+                .filter((type) => requiresSeatSelection(type))
+                .forEach((type) => {
+                    const zone = getSeatZoneMeta(type.type_name);
+                    if (!allowedZones.has(zone.key)) {
+                        return;
+                    }
+
+                    if (!uniqueByZone.has(zone.key)) {
+                        uniqueByZone.set(zone.key, type);
+                    }
+                });
+
+            return Array.from(uniqueByZone.values())
+                .sort((a, b) => getSeatZoneMeta(a.type_name).rank - getSeatZoneMeta(b.type_name).rank);
+        }
+
+        function findSeatWizardTicketType(ticketTypeId) {
+            return getSeatWizardTicketTypes().find((type) => String(type.id) === String(ticketTypeId)) || null;
+        }
+
+        function buildSeatTypeLabel(type) {
+            const zone = getSeatZoneMeta(type?.type_name);
+            const price = Number(type?.price || 0);
+            return `${zone.label} · $${formatMoney(price)}`;
+        }
+
+        async function switchSeatWizardCategory(ticketTypeId) {
+            const item = getSeatWizardCurrentItem();
+            if (!item) {
+                return;
+            }
+
+            const targetType = findSeatWizardTicketType(ticketTypeId);
+            if (!targetType) {
+                notify('No se encontro la categoria seleccionada', 'err');
+                return;
+            }
+
+            if (String(item.ticketTypeId) === String(targetType.id)) {
+                item.viewTicketTypeId = targetType.id;
+                await renderSeatWizardStep();
+                return;
+            }
+
+            const currentType = findSeatWizardTicketType(item.ticketTypeId);
+            const currentLabel = currentType ? buildSeatTypeLabel(currentType) : item.typeName || 'Boleto';
+            const targetLabel = buildSeatTypeLabel(targetType);
+            const message = `Vas a cambiar tu boleto de ${currentLabel} a ${targetLabel}. ¿Seguro que quieres reasignarlo?`;
+
+            if (!window.confirm(message)) {
+                return;
+            }
+
+            const previousKey = getSeatWizardItemKey(item);
+            const sourceTicketTypeId = item.sourceTicketTypeId || item.ticketTypeId;
+            item.ticketTypeId = targetType.id;
+            item.typeName = targetType.type_name;
+            item.unitPrice = Number(targetType.price || item.unitPrice || 0);
+            item.viewTicketTypeId = targetType.id;
+            item.sourceTicketTypeId = sourceTicketTypeId;
+
+            if (state.seatWizard.selectedByType[previousKey]) {
+                state.seatWizard.selectedByType[previousKey] = [];
+            }
+
+            const cartItem = state.cart.find((entry) => String(entry.eventId) === String(item.eventId) && String(entry.ticketTypeId) === String(sourceTicketTypeId));
+            if (cartItem) {
+                cartItem.ticketTypeId = targetType.id;
+                cartItem.typeName = targetType.type_name;
+                cartItem.unitPrice = Number(targetType.price || cartItem.unitPrice || 0);
+            }
+
+            await renderSeatWizardStep();
+            saveCartToStorage();
+            renderCart();
+            renderCheckoutRows();
+            notify(`Categoria cambiada a ${targetLabel}`, 'ok');
+        }
+
         function renderSeatTypeBands(activeTypeName) {
             if (!seatTypeBands) {
                 return;
             }
 
             const active = getSeatZoneMeta(activeTypeName);
-            const order = [
-                { key: 'platino', label: 'Platino', hint: 'Mas cerca del escenario' },
-                { key: 'vip', label: 'VIP', hint: 'Zona intermedia' },
-                { key: 'numerado', label: 'Numerado', hint: 'Mas lejos del escenario' },
-            ];
+            const order = getSeatWizardTicketTypes().map((type) => {
+                const zone = getSeatZoneMeta(type.type_name);
+                const available = Math.max(Number(type.capacity || 0) - Number(type.sold || 0), 0);
+                return {
+                    id: type.id,
+                    key: zone.key,
+                    label: zone.label,
+                    hint: `${buildSeatTypeLabel(type)} · ${available} disponibles`,
+                    active: String(type.type_name || '').toLowerCase() === String(activeTypeName || '').toLowerCase(),
+                };
+            });
 
             seatTypeBands.innerHTML = order.map((zone) => {
-                const isActive = zone.key === active.key;
-                const classes = ['seat-type-band', `is-${zone.key}`, isActive ? 'is-active' : ''].filter(Boolean).join(' ');
-                return `<div class="${classes}"><strong>${zone.label}</strong><span>${zone.hint}</span></div>`;
+                const classes = ['seat-type-band', `is-${zone.key}`, zone.active ? 'is-active' : ''].filter(Boolean).join(' ');
+                return `<button type="button" class="${classes}" data-ticket-type-id="${zone.id}"><strong>${zone.label}</strong><span>${zone.hint}</span></button>`;
             }).join('');
         }
 
@@ -1140,19 +1229,24 @@
             }
 
             const active = getSeatZoneMeta(activeTypeName);
-            const zones = [
-                { key: 'platino', label: 'Platino', hint: 'Mas cerca' },
-                { key: 'vip', label: 'VIP', hint: 'Intermedio' },
-                { key: 'numerado', label: 'Numerado', hint: 'Mas lejos' },
-            ];
+            const zones = getSeatWizardTicketTypes().map((type) => {
+                const zone = getSeatZoneMeta(type.type_name);
+                return {
+                    id: type.id,
+                    key: zone.key,
+                    label: zone.label,
+                    hint: `${buildSeatTypeLabel(type)}`,
+                    active: String(type.type_name || '').toLowerCase() === String(activeTypeName || '').toLowerCase(),
+                };
+            });
 
             const zoneBlocks = zones.map((zone) => {
-                const classes = ['mini-zone', `mini-zone-${zone.key}`, active.key === zone.key ? 'is-active' : ''].filter(Boolean).join(' ');
+                const classes = ['mini-zone', `mini-zone-${zone.key}`, zone.active ? 'is-active' : ''].filter(Boolean).join(' ');
                 return `
-                    <div class="${classes}">
+                    <button type="button" class="${classes}" data-ticket-type-id="${zone.id}">
                         <strong>${zone.label}</strong>
                         <span>${zone.hint}</span>
-                    </div>
+                    </button>
                 `;
             }).join('');
 
@@ -1200,8 +1294,9 @@
 
             const key = getSeatWizardItemKey(item);
             const selectedSet = new Set(state.seatWizard.selectedByType[key] || []);
-            const seats = state.seatWizard.seatsByType[key] || [];
-            const zoneMeta = getSeatZoneMeta(item.typeName);
+            const activeTicketTypeId = item.viewTicketTypeId || item.ticketTypeId;
+            const seats = state.seatWizard.seatsByType[String(activeTicketTypeId)] || [];
+            const zoneMeta = getSeatZoneMeta(findSeatWizardTicketType(activeTicketTypeId)?.type_name || item.typeName);
 
             if (!seats.length) {
                 seatPickerGrid.innerHTML = '<div class="empty">No hay asientos configurados para este boleto.</div>';
@@ -1218,9 +1313,30 @@
                 rowMap.get(rowLabel).push(seat);
             });
 
-            const rowLabels = Array.from(rowMap.keys()).sort((a, b) => a.localeCompare(b));
+            const numericToken = (value) => {
+                const match = String(value || '').match(/(\d+)/g);
+                if (!match || !match.length) {
+                    return 0;
+                }
+                return Number(match[match.length - 1]) || 0;
+            };
+
+            const rowLabels = Array.from(rowMap.keys()).sort((a, b) => {
+                const byNumber = numericToken(a) - numericToken(b);
+                if (byNumber !== 0) {
+                    return byNumber;
+                }
+                return String(a).localeCompare(String(b));
+            });
             const rowsHtml = rowLabels.map((rowLabel) => {
-                const seatsInRow = (rowMap.get(rowLabel) || []).sort((a, b) => Number(a.column_label || 0) - Number(b.column_label || 0));
+                const seatsInRow = (rowMap.get(rowLabel) || []).sort((a, b) => {
+                    const colA = numericToken(a.column_label || a.seat_label);
+                    const colB = numericToken(b.column_label || b.seat_label);
+                    if (colA !== colB) {
+                        return colA - colB;
+                    }
+                    return String(a.seat_label || '').localeCompare(String(b.seat_label || ''));
+                });
                 const seatButtons = seatsInRow.map((seat) => {
                     const label = String(seat.seat_label || '').toUpperCase();
                     const status = String(seat.status || 'available').toLowerCase();
@@ -1263,16 +1379,19 @@
                 return;
             }
 
-            const key = getSeatWizardItemKey(item);
-            if (!state.seatWizard.seatsByType[key]) {
-                state.seatWizard.seatsByType[key] = await fetchSeatMap(item.ticketTypeId);
+            const activeTicketTypeId = item.viewTicketTypeId || item.ticketTypeId;
+            const cacheKey = String(activeTicketTypeId);
+            if (!state.seatWizard.seatsByType[cacheKey]) {
+                state.seatWizard.seatsByType[cacheKey] = await fetchSeatMap(activeTicketTypeId);
             }
 
-            const totalSeats = (state.seatWizard.seatsByType[key] || []).length;
-            const zone = getSeatZoneMeta(item.typeName);
-            seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${zone.label} · Elige ${item.quantity} asiento(s) de ${totalSeats} asientos`;
-            renderSeatTypeBands(item.typeName);
-            renderSeatMiniMap(item.typeName);
+            const seats = state.seatWizard.seatsByType[cacheKey] || [];
+            const activeTicketType = findSeatWizardTicketType(activeTicketTypeId) || findSeatWizardTicketType(item.ticketTypeId) || null;
+            const zone = getSeatZoneMeta(activeTicketType?.type_name || item.typeName);
+            const priceText = activeTicketType ? ` · Precio $${formatMoney(activeTicketType.price || 0)}` : '';
+            seatPickerMeta.textContent = `${item.eventName || 'Evento'} · ${zone.label}${priceText} · Elige ${item.quantity} asiento(s) de ${seats.length} asientos`;
+            renderSeatTypeBands(activeTicketType?.type_name || item.typeName);
+            renderSeatMiniMap(activeTicketType?.type_name || item.typeName);
             seatPickerPrev.disabled = state.seatWizard.index === 0;
             seatPickerNext.textContent = state.seatWizard.index === state.seatWizard.items.length - 1
                 ? 'Confirmar compra'
@@ -1305,7 +1424,13 @@
             state.seatWizard = {
                 open: seatItems.length > 0,
                 index: 0,
-                items: seatItems,
+                items: seatItems.map((item, index) => ({
+                    ...item,
+                    wizardId: `${String(item.eventId || '')}::${String(item.ticketTypeId || '')}::${index}::${Date.now()}`,
+                    sourceTicketTypeId: item.ticketTypeId,
+                    originalTicketTypeId: item.ticketTypeId,
+                    viewTicketTypeId: item.ticketTypeId,
+                })),
                 autoItems,
                 seatsByType: {},
                 selectedByType: {},
@@ -1364,6 +1489,13 @@
 
                 if (!session?.url) {
                     throw new Error('No se pudo iniciar el pago con Stripe');
+                }
+
+                if (session?.sessionId) {
+                    localStorage.setItem('tm_last_checkout_session_id', String(session.sessionId));
+                }
+                if (session?.requestId) {
+                    localStorage.setItem('tm_last_checkout_request_id', String(session.requestId));
                 }
 
                 notify('Redirigiendo a Stripe para completar el pago', 'ok');
@@ -1640,6 +1772,24 @@
 
                 renderSeatButtonsForCurrentItem();
             });
+
+            const handleCategoryClick = (event) => {
+                const zoneButton = event.target.closest('[data-ticket-type-id]');
+                if (!zoneButton) {
+                    return;
+                }
+
+                const ticketTypeId = zoneButton.getAttribute('data-ticket-type-id');
+                switchSeatWizardCategory(ticketTypeId).catch((err) => notify(err.message, 'err'));
+            };
+
+            if (seatTypeBands) {
+                seatTypeBands.addEventListener('click', handleCategoryClick);
+            }
+
+            if (seatMiniMap) {
+                seatMiniMap.addEventListener('click', handleCategoryClick);
+            }
 
             seatPickerModal.addEventListener('click', (event) => {
                 if (event.target === seatPickerModal) {

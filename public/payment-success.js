@@ -1,14 +1,20 @@
 (function () {
   const paymentStatusBadge = document.getElementById('paymentStatusBadge');
-  const paymentSubtitle = document.getElementById('paymentSubtitle');
+  const purchaseSuccessDetail = document.getElementById('purchaseSuccessDetail');
+  const purchaseSuccessSummary = document.getElementById('purchaseSuccessSummary');
   const paymentSessionId = document.getElementById('paymentSessionId');
   const paymentTotal = document.getElementById('paymentTotal');
+  const paymentTotalInline = document.getElementById('paymentTotalInline');
   const paymentStatusText = document.getElementById('paymentStatusText');
   const paymentItems = document.getElementById('paymentItems');
-  const refreshButton = document.getElementById('refreshPayment');
-  const ticketDownloadsSection = document.getElementById('ticketDownloadsSection');
-  const paymentTicketList = document.getElementById('paymentTicketList');
+  const purchaseTicketsWrap = document.getElementById('purchaseTicketsWrap');
+  const purchaseTicketsGrid = document.getElementById('purchaseTicketsGrid');
+  const ticketCardTemplate = document.getElementById('ticketCardTemplate');
   const downloadAllPaidTickets = document.getElementById('downloadAllPaidTickets');
+  const closePurchaseSuccess = document.getElementById('closePurchaseSuccess');
+
+  let lastPurchasedTickets = [];
+  let lastResolvedTicketKey = '';
 
   function formatMoney(value) {
     return Number(value || 0).toLocaleString('es-MX', {
@@ -18,14 +24,14 @@
   }
 
   function notifyFallback(message) {
-    if (paymentSubtitle) {
-      paymentSubtitle.textContent = message;
+    if (purchaseSuccessDetail) {
+      purchaseSuccessDetail.textContent = message;
     }
   }
 
   function getSessionId() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('session_id') || '';
+    return params.get('session_id') || localStorage.getItem('tm_last_checkout_session_id') || '';
   }
 
   function getToken() {
@@ -61,23 +67,51 @@
     sessionStorage.removeItem('tm_boletos_cache_time');
   }
 
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatEventDate(dateText, timeText) {
+    if (!dateText) {
+      return 'Fecha por confirmar';
+    }
+
+    const date = new Date(dateText);
+    const safeDate = Number.isNaN(date.getTime()) ? String(dateText) : date.toLocaleDateString('es-MX');
+    return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
+  }
+
+  function isNoSeatTicketTypeName(typeName) {
+    const normalized = String(typeName || '').trim().toLowerCase();
+    const compact = normalized.replace(/[^a-z]/g, '');
+    return compact === 'generalnormal' || compact === 'general' || compact === 'normal';
+  }
+
+  function getDisplaySeatNumber(typeName, seatNumber) {
+    const raw = String(seatNumber || '').trim();
+    if (!raw) {
+      return 'N/A';
+    }
+    if (isNoSeatTicketTypeName(typeName) || raw.toUpperCase().startsWith('N/A-')) {
+      return 'N/A';
+    }
+    return raw;
+  }
+
   function renderItems(items) {
     if (!Array.isArray(items) || !items.length) {
-      paymentItems.innerHTML = '<div class="payment-item">No se encontraron items del pago.</div>';
+      paymentItems.innerHTML = '<li>No se encontraron items del pago.</li>';
       return;
     }
 
     paymentItems.innerHTML = items.map((item) => {
-      const seats = Array.isArray(item.seatLabels) && item.seatLabels.length ? `<small>Asientos: ${item.seatLabels.join(', ')}</small>` : '<small>Asientos asignados automaticamente</small>';
       const subtotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-      return `
-        <div class="payment-item">
-          <strong>${item.eventName || 'Evento'}</strong>
-          <span>${item.typeName || 'Boleto'} · ${item.quantity || 0} x $${formatMoney(item.unitPrice || 0)}</span>
-          ${seats}
-          <span>Subtotal: $${formatMoney(subtotal)}</span>
-        </div>
-      `;
+      return `<li><strong>${escapeHtml(item.eventName || 'Evento')}</strong> · ${escapeHtml(item.typeName || 'Boleto')} - ${Number(item.quantity || 0)} x $${formatMoney(item.unitPrice || 0)} = $${formatMoney(subtotal)}</li>`;
     }).join('');
   }
 
@@ -113,30 +147,135 @@
     return lines;
   }
 
-  function renderTicketDownloads(data, isPaid) {
-    const ticketIds = Array.isArray(data.ticketIds) ? data.ticketIds : [];
-    if (!isPaid || !ticketIds.length || !ticketDownloadsSection || !paymentTicketList) {
-      if (ticketDownloadsSection) {
-        ticketDownloadsSection.style.display = 'none';
+  async function fetchPurchasedEvents() {
+    return apiCall('GET', '/tickets/purchased-events');
+  }
+
+  async function resolvePurchasedTicketsById(ticketIds) {
+    const normalizedIds = Array.isArray(ticketIds)
+      ? ticketIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+
+    if (!normalizedIds.length) {
+      return [];
+    }
+
+    const events = await fetchPurchasedEvents();
+    const ticketMap = new Map();
+
+    (Array.isArray(events) ? events : []).forEach((event) => {
+      (Array.isArray(event.tickets) ? event.tickets : []).forEach((ticket) => {
+        ticketMap.set(String(ticket.id), {
+          id: ticket.id,
+          qrCode: ticket.qr_code,
+          seatNumber: ticket.seat_number,
+          status: ticket.status,
+          event: {
+            id: event.id,
+            name: event.name,
+            event_date: event.event_date,
+            event_time: event.event_time,
+            location: event.location,
+            image_url: event.image_url,
+            artist_name: event.artist_name,
+          },
+          ticketType: {
+            type_name: ticket.type_name,
+            price: Number(ticket.price || 0),
+          },
+        });
+      });
+    });
+
+    return normalizedIds.map((id) => ticketMap.get(id)).filter(Boolean);
+  }
+
+  function setQrPlaceholder(container) {
+    container.innerHTML = '<span style="font-size:12px;color:#7b7383;">Generando QR...</span>';
+  }
+
+  async function hydrateTicketQr(container, ticketId) {
+    try {
+      const token = getToken();
+      const response = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/qr-svg`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo obtener QR');
+      }
+
+      const data = await response.json();
+      container.innerHTML = data.qrSvg || '';
+    } catch (err) {
+      container.innerHTML = '<span style="font-size:12px;color:#7b7383;">QR no disponible</span>';
+    }
+  }
+
+  function renderPurchasedTickets(tickets) {
+    lastPurchasedTickets = Array.isArray(tickets) ? tickets : [];
+    if (!purchaseTicketsWrap || !purchaseTicketsGrid || !ticketCardTemplate) {
+      return;
+    }
+
+    if (!lastPurchasedTickets.length) {
+      purchaseTicketsWrap.classList.add('hidden');
+      purchaseTicketsGrid.innerHTML = '';
+      if (downloadAllPaidTickets) {
+        downloadAllPaidTickets.classList.add('hidden');
       }
       return;
     }
 
-    const lines = flattenTicketLines(Array.isArray(data.payload?.items) ? data.payload.items : []);
-    paymentTicketList.innerHTML = ticketIds.map((ticketId, index) => {
-      const line = lines[index] || {};
-      return `
-        <article class="payment-ticket-row">
-          <div>
-            <strong>${line.eventName || 'Evento'} · ${line.typeName || 'Boleto'}</strong>
-            <small>Asiento: ${line.seatLabel || 'N/A'} · Precio: $${formatMoney(line.unitPrice || 0)}</small>
-          </div>
-          <button type="button" data-ticket-id="${ticketId}">Descargar boleto</button>
-        </article>
-      `;
-    }).join('');
+    purchaseTicketsWrap.classList.remove('hidden');
+    purchaseTicketsGrid.innerHTML = '';
 
-    ticketDownloadsSection.style.display = 'grid';
+    lastPurchasedTickets.forEach((ticket) => {
+      const fragment = ticketCardTemplate.content.cloneNode(true);
+      const card = fragment.querySelector('.generated-ticket');
+      const image = fragment.querySelector('.generated-ticket-image');
+      const name = fragment.querySelector('.ticket-event-name');
+      const subtitle = fragment.querySelector('.ticket-event-subtitle');
+      const artist = fragment.querySelector('.ticket-event-artist');
+      const typeName = fragment.querySelector('.ticket-type-name');
+      const seatNumber = fragment.querySelector('.ticket-seat-number');
+      const price = fragment.querySelector('.ticket-price');
+      const status = fragment.querySelector('.ticket-status');
+      const qrContainer = fragment.querySelector('.qr-container');
+      const downloadBtn = fragment.querySelector('.download-single');
+
+      const event = ticket.event || {};
+      const ticketType = ticket.ticketType || {};
+
+      image.src = event.image_url || 'https://placehold.co/520x760?text=Evento';
+      image.alt = event.name || 'Boleto';
+      name.textContent = event.name || 'Evento';
+      subtitle.textContent = `${formatEventDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
+      artist.textContent = `Artista: ${event.artist_name || 'Por confirmar'}`;
+      typeName.textContent = ticketType.type_name || 'Boleto';
+      seatNumber.textContent = getDisplaySeatNumber(ticketType.type_name, ticket.seatNumber);
+      price.textContent = `$${formatMoney(ticketType.price || 0)}`;
+      status.textContent = ticket.status === false ? 'Usado' : 'Confirmado';
+
+      if (card) {
+        card.dataset.ticketId = String(ticket.id || '');
+      }
+
+      if (downloadBtn) {
+        downloadBtn.dataset.ticketId = String(ticket.id || '');
+      }
+
+      if (qrContainer) {
+        setQrPlaceholder(qrContainer);
+        hydrateTicketQr(qrContainer, ticket.id).catch(() => {});
+      }
+
+      purchaseTicketsGrid.appendChild(fragment);
+    });
+
+    if (downloadAllPaidTickets) {
+      downloadAllPaidTickets.classList.toggle('hidden', lastPurchasedTickets.length <= 1);
+    }
   }
 
   async function apiCall(method, url) {
@@ -216,12 +355,10 @@
   function updateUi(data) {
     const status = String(data.status || 'unknown').toLowerCase();
     const isPaid = status === 'paid' || status === 'succeeded' || status === 'complete';
-    const isPending = !isPaid;
 
     if (paymentStatusBadge) {
       paymentStatusBadge.textContent = isPaid ? 'Pago confirmado' : 'Procesando pago';
       paymentStatusBadge.classList.toggle('is-paid', isPaid);
-      paymentStatusBadge.classList.toggle('is-pending', isPending);
     }
 
     if (paymentStatusText) {
@@ -236,18 +373,26 @@
       paymentTotal.textContent = `$${formatMoney(data.amountTotal || 0)}`;
     }
 
-    if (paymentSubtitle) {
-      paymentSubtitle.textContent = isPaid
-        ? 'Tu compra ya quedó reflejada. Aquí tienes el detalle de lo que pagaste.'
-        : 'Stripe todavía está confirmando tu pago. Mantén esta pestaña abierta.';
+    if (paymentTotalInline) {
+      paymentTotalInline.textContent = `$${formatMoney(data.amountTotal || 0)}`;
+    }
+
+    const lineItems = Array.isArray(data.payload?.items) ? data.payload.items : [];
+    const totalElements = lineItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+    if (purchaseSuccessDetail) {
+      purchaseSuccessDetail.textContent = isPaid
+        ? `Tu compra fue exitosa. Se procesaron ${totalElements} elemento(s).`
+        : 'Stripe todavia esta confirmando tu pago. Mantente en esta pantalla.';
     }
 
     renderItems(Array.isArray(data.payload?.items) ? data.payload.items : []);
-    renderTicketDownloads(data, isPaid);
 
     if (isPaid) {
       clearCurrentCart();
       clearBoletosCache();
+      localStorage.removeItem('tm_last_checkout_session_id');
+      localStorage.removeItem('tm_last_checkout_request_id');
     }
 
     return isPaid;
@@ -263,11 +408,25 @@
     try {
       const data = await apiCall('GET', `/payments/session/${encodeURIComponent(sessionId)}`);
       const isPaid = updateUi(data);
+
+      if (isPaid) {
+        const ticketIds = Array.isArray(data.ticketIds) ? data.ticketIds : [];
+        const ticketKey = ticketIds.map((id) => String(id)).join('|');
+        if (ticketKey !== lastResolvedTicketKey) {
+          const resolvedTickets = await resolvePurchasedTicketsById(ticketIds);
+          renderPurchasedTickets(resolvedTickets);
+          lastResolvedTicketKey = ticketKey;
+        }
+      } else {
+        renderPurchasedTickets([]);
+        lastResolvedTicketKey = '';
+      }
+
       if (isPaid && pollTimer) {
         clearInterval(pollTimer);
       }
-      if (data.stripe?.paymentStatus && paymentSubtitle && !isPaid) {
-        paymentSubtitle.textContent = `Estado de Stripe: ${data.stripe.paymentStatus}`;
+      if (data.stripe?.paymentStatus && purchaseSuccessDetail && !isPaid) {
+        purchaseSuccessDetail.textContent = `Estado actual en Stripe: ${data.stripe.paymentStatus}`;
       }
     } catch (err) {
       notifyFallback(err.message);
@@ -278,14 +437,8 @@
     loadPayment().catch(() => {});
   }, 2500);
 
-  if (refreshButton) {
-    refreshButton.addEventListener('click', () => {
-      loadPayment().catch((err) => notifyFallback(err.message));
-    });
-  }
-
-  if (paymentTicketList) {
-    paymentTicketList.addEventListener('click', (event) => {
+  if (purchaseTicketsGrid) {
+    purchaseTicketsGrid.addEventListener('click', (event) => {
       const button = event.target.closest('[data-ticket-id]');
       if (!button) {
         return;
@@ -298,12 +451,7 @@
   if (downloadAllPaidTickets) {
     downloadAllPaidTickets.addEventListener('click', async () => {
       try {
-        const sessionId = getSessionId();
-        if (!sessionId) {
-          throw new Error('Sesion de pago no encontrada');
-        }
-        const data = await apiCall('GET', `/payments/session/${encodeURIComponent(sessionId)}`);
-        const ticketIds = Array.isArray(data.ticketIds) ? data.ticketIds : [];
+        const ticketIds = lastPurchasedTickets.map((ticket) => ticket?.id).filter(Boolean);
         if (!ticketIds.length) {
           throw new Error('Aun no hay boletos generados para descargar');
         }
@@ -311,6 +459,12 @@
       } catch (err) {
         notifyFallback(err.message);
       }
+    });
+  }
+
+  if (closePurchaseSuccess) {
+    closePurchaseSuccess.addEventListener('click', () => {
+      window.location.href = '/';
     });
   }
 
