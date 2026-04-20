@@ -116,11 +116,8 @@ function buildTierSeatLayout(totalSeats, typeName, occupiedLabels = new Set()) {
     return seats;
   }
 
-  // Crece primero en ancho (hacia afuera) y despues en filas.
-  const preferredRows = 12;
-  const minCols = 20;
-  const maxCols = 48;
-  const colsPerRow = Math.min(maxCols, Math.max(minCols, Math.ceil(safeTotal / preferredRows)));
+  // Intenta una distribucion cuadrada para evitar filas extremadamente largas.
+  const colsPerRow = Math.max(1, Math.ceil(Math.sqrt(safeTotal)));
   const totalRows = Math.ceil(safeTotal / colsPerRow);
   let created = 0;
 
@@ -146,6 +143,27 @@ function buildTierSeatLayout(totalSeats, typeName, occupiedLabels = new Set()) {
   }
 
   return seats;
+}
+
+function rebalanceSeatGridForDisplay(seats, typeName) {
+  const safeSeats = Array.isArray(seats) ? seats.slice() : [];
+  if (!safeSeats.length) {
+    return safeSeats;
+  }
+
+  const zone = normalizeSeatZoneType(typeName);
+  const colsPerRow = Math.max(1, Math.ceil(Math.sqrt(safeSeats.length)));
+
+  return safeSeats.map((seat, index) => {
+    const row = Math.floor(index / colsPerRow) + 1;
+    const col = (index % colsPerRow) + 1;
+    return {
+      ...seat,
+      row_label: `${zone.code}-${String(row).padStart(2, '0')}`,
+      column_label: String(col),
+      section_label: zone.code,
+    };
+  });
 }
 
 async function ensureDefaultSeatsForTicketType(client, ticketTypeId, capacity, typeName) {
@@ -765,6 +783,7 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         `SELECT seat_label, row_label, column_label, status
          FROM seats
          WHERE ticket_type_id = $1
+           AND status = 'available'
          ORDER BY row_label, column_label`,
         [ticketTypeId]
       );
@@ -783,9 +802,17 @@ router.get('/seats/:ticketTypeId', auth, async (req, res) => {
         [ticketTypeId]
       );
       const occupied = new Set(soldResult.rows.map((row) => String(row.seat_number || '').trim()).filter(Boolean));
-      seats = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupied);
+      seats = buildTierSeatLayout(Math.max(Number(ticketType.capacity || 0), 0), ticketType.type_name, occupied)
+        .filter((seat) => seat.status === 'available');
     }
 
+    // Keep seat list aligned with remaining inventory even if legacy sales did not update seats table.
+    const remainingInventory = Math.max(Number(ticketType.capacity || 0) - Number(ticketType.sold || 0), 0);
+    if (seats.length > remainingInventory) {
+      seats = seats.slice(0, remainingInventory);
+    }
+
+    seats = rebalanceSeatGridForDisplay(seats, ticketType.type_name);
     const seatZone = normalizeSeatZoneType(ticketType.type_name);
 
     res.json({
