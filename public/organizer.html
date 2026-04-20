@@ -127,8 +127,12 @@
                     <input id="eventDate" type="date">
                 </div>
                 <div class="modal-field">
-                    <label class="field-label" for="eventTime">Hora</label>
+                    <label class="field-label" for="eventTime">Hora de inicio</label>
                     <input id="eventTime" type="time">
+                </div>
+                <div class="modal-field">
+                    <label class="field-label" for="eventEndTime">Hora de fin</label>
+                    <input id="eventEndTime" type="time">
                 </div>
                 <div class="modal-field full">
                     <label class="field-label" for="eventDescription">Descripcion</label>
@@ -433,6 +437,7 @@
             document.getElementById('eventLocation').value = '';
             document.getElementById('eventDate').value = '';
             document.getElementById('eventTime').value = '';
+            document.getElementById('eventEndTime').value = '';
             document.getElementById('eventDescription').value = '';
             document.getElementById('eventCapacity').value = '';
             document.getElementById('artistName').value = '';
@@ -472,13 +477,19 @@
             reader.readAsDataURL(file);
         }
 
-        function formatEventDate(dateText, timeText) {
+        function formatEventDate(dateText, timeText, endTimeText) {
             if (!dateText) {
                 return 'Fecha por confirmar';
             }
             const date = new Date(dateText);
             const safeDate = Number.isNaN(date.getTime()) ? dateText : date.toLocaleDateString('es-MX');
-            return `${safeDate}${timeText ? ` ${timeText}` : ''}`;
+            if (timeText && endTimeText) {
+                return `${safeDate} ${timeText} - ${endTimeText}`;
+            }
+            if (timeText) {
+                return `${safeDate} ${timeText}`;
+            }
+            return safeDate;
         }
 
         function isEventActive(event) {
@@ -500,14 +511,20 @@
             const location = document.getElementById('eventLocation').value.trim();
             const event_date = document.getElementById('eventDate').value;
             const event_time = document.getElementById('eventTime').value;
+            const event_end_time = document.getElementById('eventEndTime').value;
             const description = document.getElementById('eventDescription').value.trim();
             const capacity = Number(document.getElementById('eventCapacity').value);
             const artist_name = document.getElementById('artistName').value.trim();
             const artist_fee = Number(document.getElementById('artistFee').value);
             const image_url = createEventImageDataUrl;
 
-            if (!name || !location || !event_date || !event_time || !description) {
+            if (!name || !location || !event_date || !event_time || !event_end_time || !description) {
                 notify('Completa los campos obligatorios del evento', 'err');
+                return;
+            }
+
+            if (event_end_time <= event_time) {
+                notify('La hora de fin debe ser mayor a la hora de inicio', 'err');
                 return;
             }
 
@@ -527,6 +544,7 @@
                     location,
                     event_date,
                     event_time,
+                    event_end_time,
                     description,
                     capacity,
                     artist_name: artist_name || null,
@@ -596,7 +614,7 @@
                             <h3>${event.name || 'Evento'}</h3>
                             <span class="event-status-badge ${active ? 'is-active' : 'is-inactive'}">${active ? 'Activo' : 'Inactivo'}</span>
                         </div>
-                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
+                        <p class="event-meta">${formatEventDate(event.event_date, event.event_time, event.event_end_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                         <div class="admin-metric-grid">
                             <div class="admin-metric-item"><span>Boletos vendidos</span><strong>${Number(event.tickets_sold || 0)}</strong></div>
                             <div class="admin-metric-item"><span>Boletos no vendidos</span><strong>${Number(event.tickets_unsold || 0)}</strong></div>
@@ -659,7 +677,7 @@
                 card.innerHTML = `
                     ${imageHtml}
                     <h3>${event.name}</h3>
-                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
+                    <p class="event-meta">${formatEventDate(event.event_date, event.event_time, event.event_end_time)}<br>${event.location || 'Ubicacion por confirmar'}<br>Artista: ${event.artist_name || 'Por confirmar'}</p>
                     ${managerControls}
                 `;
 

@@ -10,6 +10,177 @@ let imageSupportChecked = false;
 let imageSupported = false;
 let activeSupportChecked = false;
 let activeSupported = false;
+let eventEndTimeSupportChecked = false;
+let eventEndTimeSupported = false;
+let ticketCreatedAtSupportChecked = false;
+let ticketCreatedAtSupported = false;
+
+async function ensureTicketCreatedAtSupport() {
+  if (ticketCreatedAtSupportChecked) {
+    return ticketCreatedAtSupported;
+  }
+
+  try {
+    const check = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'tickets' AND column_name = 'created_at'
+       LIMIT 1`
+    );
+
+    if (check.rows.length > 0) {
+      // Column exists, make sure it has data for NULL entries
+      try {
+        await pool.query(
+          `UPDATE tickets SET created_at = NOW() WHERE created_at IS NULL`
+        );
+      } catch (err) {
+        // ignore if already constrained
+      }
+      ticketCreatedAtSupported = true;
+      ticketCreatedAtSupportChecked = true;
+      return true;
+    }
+
+    // Column doesn't exist, create it
+    await pool.query('ALTER TABLE tickets ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE');
+    await pool.query('UPDATE tickets SET created_at = NOW()');
+    try {
+      await pool.query('ALTER TABLE tickets ALTER COLUMN created_at SET NOT NULL');
+    } catch (err) {
+      // ignore if already set
+    }
+    try {
+      await pool.query('ALTER TABLE tickets ALTER COLUMN created_at SET DEFAULT NOW()');
+    } catch (err) {
+      // ignore if already set
+    }
+    ticketCreatedAtSupported = true;
+  } catch (err) {
+    if (err.code === '42701') {
+      ticketCreatedAtSupported = true;
+    } else {
+      ticketCreatedAtSupported = false;
+    }
+  }
+
+  ticketCreatedAtSupportChecked = true;
+  return ticketCreatedAtSupported;
+}
+
+function getTrendSqlConfig(bucket) {
+  switch (bucket) {
+    case 'day':
+      return {
+        trunc: 'day',
+        step: '1 day',
+        points: 14,
+      };
+    case 'week':
+      return {
+        trunc: 'week',
+        step: '1 week',
+        points: 12,
+      };
+    case 'month':
+      return {
+        trunc: 'month',
+        step: '1 month',
+        points: 12,
+      };
+    case 'year':
+      return {
+        trunc: 'year',
+        step: '1 year',
+        points: 1,
+      };
+    default:
+      return null;
+  }
+}
+
+async function getEventSalesTrend(eventId, bucket, offset = 0) {
+  const config = getTrendSqlConfig(bucket);
+  if (!config) {
+    return [];
+  }
+
+  const query = `
+    WITH series AS (
+      SELECT generate_series(
+        date_trunc('${config.trunc}', NOW()) - INTERVAL '${config.step}' * (${config.points} - 1 + $2),
+        date_trunc('${config.trunc}', NOW()) - INTERVAL '${config.step}' * $2,
+        INTERVAL '${config.step}'
+      ) AS period_start
+    ),
+    sales AS (
+      SELECT
+        date_trunc('${config.trunc}', COALESCE(t.created_at, NOW())) AS period_start,
+        COUNT(*)::int AS tickets_sold,
+        COALESCE(SUM(tt.price), 0)::numeric AS total_income
+      FROM tickets t
+      JOIN ticket_types tt ON tt.id = t.ticket_type_id
+      WHERE tt.event_id = $1
+      GROUP BY 1
+    )
+    SELECT
+      s.period_start,
+      COALESCE(sa.tickets_sold, 0)::int AS tickets_sold,
+      COALESCE(sa.total_income, 0)::numeric AS total_income
+    FROM series s
+    LEFT JOIN sales sa ON sa.period_start = s.period_start
+    ORDER BY s.period_start ASC
+  `;
+
+  try {
+    const result = await pool.query(query, [eventId, Number(offset || 0)]);
+    const rows = result.rows || [];
+    
+    // If we have real ticket records, use them
+    if (rows.some(row => row.tickets_sold > 0)) {
+      return rows.map((row) => ({
+        period_start: row.period_start,
+        tickets_sold: Number(row.tickets_sold || 0),
+        total_income: Number(row.total_income || 0),
+      }));
+    }
+
+    // Fallback: if no tickets in the table but ticket_types has sold > 0, use that
+    // Get total sales from ticket_types
+    const ttResult = await pool.query(
+      `SELECT COALESCE(SUM(sold), 0)::int AS total_sold, COALESCE(SUM(sold * price), 0)::numeric AS total_income
+       FROM ticket_types WHERE event_id = $1`,
+      [eventId]
+    );
+    
+    const totalSold = Number(ttResult.rows[0]?.total_sold || 0);
+    const totalIncome = Number(ttResult.rows[0]?.total_income || 0);
+    
+    if (totalSold > 0 && rows.length > 0) {
+      // Distribute sales to the last point in the series
+      return rows.map((row, index) => {
+        const isLast = index === rows.length - 1;
+        return {
+          period_start: row.period_start,
+          tickets_sold: isLast ? totalSold : 0,
+          total_income: isLast ? totalIncome : 0,
+        };
+      });
+    }
+
+    return rows.map((row) => ({
+      period_start: row.period_start,
+      tickets_sold: Number(row.tickets_sold || 0),
+      total_income: Number(row.total_income || 0),
+    }));
+  } catch (err) {
+    console.error('getEventSalesTrend error:', err.message, 'code:', err.code);
+    if (err.code === '42703' || err.code === '42P01') {
+      return [];
+    }
+    throw err;
+  }
+}
 
 async function ensureImageSupport() {
   if (imageSupportChecked) {
@@ -78,6 +249,39 @@ async function ensureActiveSupport() {
   return activeSupported;
 }
 
+async function ensureEventEndTimeSupport() {
+  if (eventEndTimeSupportChecked) {
+    return eventEndTimeSupported;
+  }
+
+  try {
+    const check = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'events' AND column_name = 'event_end_time'
+       LIMIT 1`
+    );
+
+    if (check.rows.length > 0) {
+      eventEndTimeSupported = true;
+      eventEndTimeSupportChecked = true;
+      return true;
+    }
+
+    await pool.query('ALTER TABLE events ADD COLUMN event_end_time TIME');
+    eventEndTimeSupported = true;
+  } catch (err) {
+    if (err.code === '42701') {
+      eventEndTimeSupported = true;
+    } else {
+      eventEndTimeSupported = false;
+    }
+  }
+
+  eventEndTimeSupportChecked = true;
+  return eventEndTimeSupported;
+}
+
 function canManageEvent(user, organizerId) {
   if (!user) {
     return false;
@@ -141,6 +345,16 @@ function buildEventDateTime(eventDate, eventTime) {
   return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
+function isValidTimeRange(startTime, endTime) {
+  if (!startTime || !endTime) {
+    return true;
+  }
+
+  const start = String(startTime).slice(0, 5);
+  const end = String(endTime).slice(0, 5);
+  return end > start;
+}
+
 function isPastEvent(event) {
   const eventDateTime = buildEventDateTime(event?.event_date, event?.event_time);
   if (!eventDateTime) {
@@ -171,7 +385,9 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
-async function buildEventAdminReport(eventId) {
+async function buildEventAdminReport(eventId, options = {}) {
+  await ensureTicketCreatedAtSupport();
+
   const eventResult = await pool.query('SELECT * FROM events WHERE id = $1', [eventId]);
   if (eventResult.rows.length === 0) {
     return null;
@@ -192,6 +408,15 @@ async function buildEventAdminReport(eventId) {
   );
 
   const totals = totalsResult.rows[0] || {};
+  const bucket = ['day', 'week', 'month', 'year'].includes(options.bucket) ? options.bucket : 'day';
+  const offset = Number.isInteger(Number(options.offset)) ? Number(options.offset) : 0;
+  const [dayTrend, weekTrend, monthTrend, yearTrend] = await Promise.all([
+    getEventSalesTrend(eventId, 'day', bucket === 'day' ? offset : 0),
+    getEventSalesTrend(eventId, 'week', bucket === 'week' ? offset : 0),
+    getEventSalesTrend(eventId, 'month', bucket === 'month' ? offset : 0),
+    getEventSalesTrend(eventId, 'year', bucket === 'year' ? offset : 0),
+  ]);
+
   return {
     event,
     ticket_types: ticketTypesResult.rows,
@@ -200,6 +425,16 @@ async function buildEventAdminReport(eventId) {
     total_income: Number(totals.total_income || 0),
     unsold_potential: Number(totals.unsold_potential || 0),
     total_capacity: Number(totals.total_capacity || 0),
+    trend_window: {
+      bucket,
+      offset,
+    },
+    trends: {
+      day: dayTrend,
+      week: weekTrend,
+      month: monthTrend,
+      year: yearTrend,
+    },
   };
 }
 
@@ -209,6 +444,7 @@ router.get('/admin/overview', auth, async (req, res) => {
   }
 
   try {
+    const supportsEndTime = await ensureEventEndTimeSupport();
     const eventRows = await pool.query('SELECT * FROM events ORDER BY event_date DESC, event_time DESC');
     const reports = [];
     for (const event of eventRows.rows) {
@@ -221,6 +457,7 @@ router.get('/admin/overview', auth, async (req, res) => {
           location: event.location,
           event_date: event.event_date,
           event_time: event.event_time,
+          event_end_time: supportsEndTime ? (event.event_end_time || null) : null,
           active: event.active,
           artist_fee: Number(event.artist_fee || 0),
           tickets_sold: report.total_tickets_sold,
@@ -250,13 +487,15 @@ router.get('/admin/overview', auth, async (req, res) => {
 
 router.get('/:id/admin-report', auth, async (req, res) => {
   const { id } = req.params;
+  const bucket = String(req.query.bucket || 'day').toLowerCase();
+  const offset = Number(req.query.offset || 0);
 
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'No autorizado' });
   }
 
   try {
-    const report = await buildEventAdminReport(id);
+    const report = await buildEventAdminReport(id, { bucket, offset });
     if (!report) {
       return res.status(404).json({ error: 'Evento no encontrado' });
     }
@@ -275,14 +514,19 @@ router.get('/:id/admin-report/pdf', auth, async (req, res) => {
   }
 
   try {
-    const report = await buildEventAdminReport(id);
+    const report = await buildEventAdminReport(id, {
+      bucket: String(req.query.bucket || 'day').toLowerCase(),
+      offset: Number(req.query.offset || 0),
+    });
     if (!report) {
       return res.status(404).json({ error: 'Evento no encontrado' });
     }
 
     const event = report.event;
     const eventDate = event.event_date ? new Date(event.event_date).toLocaleDateString('es-MX') : 'Fecha por confirmar';
-    const eventTime = event.event_time ? ` ${event.event_time}` : '';
+    const eventTime = event.event_time && event.event_end_time
+      ? ` ${event.event_time} - ${event.event_end_time}`
+      : (event.event_time ? ` ${event.event_time}` : '');
     const statusLabel = event.active === false ? 'Inactivo' : 'Activo';
     const htmlRows = report.ticket_types.map((type) => {
       const sold = Number(type.sold || 0);
@@ -390,13 +634,17 @@ router.get('/', async (req, res) => {
     const requestUser = getRequestUser(req);
     const supportsActive = await ensureActiveSupport();
     const supportsImage = await ensureImageSupport();
+    const supportsEndTime = await ensureEventEndTimeSupport();
     const query = supportsImage
       ? 'SELECT * FROM events ORDER BY event_date, event_time'
       : 'SELECT *, NULL::text AS image_url FROM events ORDER BY event_date, event_time';
     const result = await pool.query(query);
-    const rows = requestUser && (requestUser.role === 'admin' || requestUser.role === 'organizer')
+    const withEndTime = supportsEndTime
       ? result.rows
-      : result.rows.filter((event) => isPastEvent(event) || !supportsActive || isEventActive(event));
+      : result.rows.map((event) => ({ ...event, event_end_time: null }));
+    const rows = requestUser && (requestUser.role === 'admin' || requestUser.role === 'organizer')
+      ? withEndTime
+      : withEndTime.filter((event) => isPastEvent(event) || !supportsActive || isEventActive(event));
 
     res.json(rows);
   } catch (err) {
@@ -410,6 +658,7 @@ router.get('/:id', async (req, res) => {
     const requestUser = getRequestUser(req);
     const supportsActive = await ensureActiveSupport();
     const supportsImage = await ensureImageSupport();
+    const supportsEndTime = await ensureEventEndTimeSupport();
     const selectQuery = supportsImage
       ? 'SELECT * FROM events WHERE id = $1'
       : 'SELECT *, NULL::text AS image_url FROM events WHERE id = $1';
@@ -422,7 +671,10 @@ router.get('/:id', async (req, res) => {
     if ((isRestrictedByDate || isRestrictedByState) && !canViewRestricted) {
       return res.status(404).json({ error: 'Evento no encontrado' });
     }
-    res.json(event);
+    res.json({
+      ...event,
+      event_end_time: supportsEndTime ? (event.event_end_time || null) : null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -432,18 +684,35 @@ router.post('/', auth, async (req, res) => {
   if (req.user.role !== 'organizer') {
     return res.status(403).json({ error: 'No autorizado' });
   }
-  const { name, location, event_date, event_time, description, capacity, artist_name, artist_fee, image_url = null } = req.body;
+  const { name, location, event_date, event_time, event_end_time = null, description, capacity, artist_name, artist_fee, image_url = null } = req.body;
 
   try {
     const supportsActive = await ensureActiveSupport();
     const supportsImage = await ensureImageSupport();
+    const supportsEndTime = await ensureEventEndTimeSupport();
+
+    if (!isValidTimeRange(event_time, event_end_time)) {
+      return res.status(400).json({ error: 'La hora de fin debe ser mayor a la hora de inicio' });
+    }
 
     let result;
-    if (supportsImage && supportsActive) {
+    if (supportsImage && supportsActive && supportsEndTime) {
+      result = await pool.query(
+        `INSERT INTO events (name, location, event_date, event_time, event_end_time, description, capacity, artist_name, artist_fee, organizer_id, image_url, active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, FALSE) RETURNING *`,
+        [name, location, event_date, event_time, event_end_time || null, description, capacity, artist_name, artist_fee, req.user.id, image_url]
+      );
+    } else if (supportsImage && supportsActive) {
       result = await pool.query(
         `INSERT INTO events (name, location, event_date, event_time, description, capacity, artist_name, artist_fee, organizer_id, image_url, active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE) RETURNING *`,
         [name, location, event_date, event_time, description, capacity, artist_name, artist_fee, req.user.id, image_url]
+      );
+    } else if (supportsImage && supportsEndTime) {
+      result = await pool.query(
+        `INSERT INTO events (name, location, event_date, event_time, event_end_time, description, capacity, artist_name, artist_fee, organizer_id, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [name, location, event_date, event_time, event_end_time || null, description, capacity, artist_name, artist_fee, req.user.id, image_url]
       );
     } else if (supportsImage) {
       result = await pool.query(
@@ -451,11 +720,23 @@ router.post('/', auth, async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
         [name, location, event_date, event_time, description, capacity, artist_name, artist_fee, req.user.id, image_url]
       );
+    } else if (supportsActive && supportsEndTime) {
+      result = await pool.query(
+        `INSERT INTO events (name, location, event_date, event_time, event_end_time, description, capacity, artist_name, artist_fee, organizer_id, active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE) RETURNING *, NULL::text AS image_url`,
+        [name, location, event_date, event_time, event_end_time || null, description, capacity, artist_name, artist_fee, req.user.id]
+      );
     } else if (supportsActive) {
       result = await pool.query(
         `INSERT INTO events (name, location, event_date, event_time, description, capacity, artist_name, artist_fee, organizer_id, active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE) RETURNING *, NULL::text AS image_url`,
         [name, location, event_date, event_time, description, capacity, artist_name, artist_fee, req.user.id]
+      );
+    } else if (supportsEndTime) {
+      result = await pool.query(
+        `INSERT INTO events (name, location, event_date, event_time, event_end_time, description, capacity, artist_name, artist_fee, organizer_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *, NULL::text AS image_url`,
+        [name, location, event_date, event_time, event_end_time || null, description, capacity, artist_name, artist_fee, req.user.id]
       );
     } else {
       result = await pool.query(
@@ -516,6 +797,7 @@ router.put('/:id', auth, async (req, res) => {
     location,
     event_date,
     event_time,
+    event_end_time,
     description,
     capacity,
     artist_name,
@@ -529,6 +811,12 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     const current = eventResult.rows[0];
+    const supportsEndTime = await ensureEventEndTimeSupport();
+
+    if (!isValidTimeRange(event_time ?? current.event_time, event_end_time ?? current.event_end_time)) {
+      return res.status(400).json({ error: 'La hora de fin debe ser mayor a la hora de inicio' });
+    }
+
     if (!canManageEvent(req.user, current.organizer_id)) {
       return res.status(403).json({ error: 'No autorizado' });
     }
@@ -538,30 +826,51 @@ router.put('/:id', auth, async (req, res) => {
       location: location ?? current.location,
       event_date: event_date ?? current.event_date,
       event_time: event_time ?? current.event_time,
+      event_end_time: event_end_time ?? current.event_end_time,
       description: description ?? current.description,
       capacity: capacity ?? current.capacity,
       artist_name: artist_name ?? current.artist_name,
       artist_fee: artist_fee ?? current.artist_fee
     };
 
-    const result = await pool.query(
-      `UPDATE events
-       SET name = $1, location = $2, event_date = $3, event_time = $4,
-           description = $5, capacity = $6, artist_name = $7, artist_fee = $8
-       WHERE id = $9
-       RETURNING *`,
-      [
-        next.name,
-        next.location,
-        next.event_date,
-        next.event_time,
-        next.description,
-        next.capacity,
-        next.artist_name,
-        next.artist_fee,
-        id
-      ]
-    );
+    const result = supportsEndTime
+      ? await pool.query(
+        `UPDATE events
+         SET name = $1, location = $2, event_date = $3, event_time = $4, event_end_time = $5,
+             description = $6, capacity = $7, artist_name = $8, artist_fee = $9
+         WHERE id = $10
+         RETURNING *`,
+        [
+          next.name,
+          next.location,
+          next.event_date,
+          next.event_time,
+          next.event_end_time || null,
+          next.description,
+          next.capacity,
+          next.artist_name,
+          next.artist_fee,
+          id
+        ]
+      )
+      : await pool.query(
+        `UPDATE events
+         SET name = $1, location = $2, event_date = $3, event_time = $4,
+             description = $5, capacity = $6, artist_name = $7, artist_fee = $8
+         WHERE id = $9
+         RETURNING *`,
+        [
+          next.name,
+          next.location,
+          next.event_date,
+          next.event_time,
+          next.description,
+          next.capacity,
+          next.artist_name,
+          next.artist_fee,
+          id
+        ]
+      );
 
     res.json(result.rows[0]);
   } catch (err) {

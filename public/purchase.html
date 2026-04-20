@@ -820,6 +820,10 @@
             return state.user && state.user.role === 'user';
         }
 
+        function isRegularUser() {
+            return isBuyer();
+        }
+
         async function apiCall(method, url, body = null, withPrefix = true) {
             const headers = { 'Content-Type': 'application/json' };
             if (state.token) {

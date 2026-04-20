@@ -20,7 +20,6 @@
 
 body {
     margin: 0;
-    color: var(--ink);
     background:
         radial-gradient(circle at 10% 10%, rgba(216, 50, 28, 0.08), transparent 35%),
         radial-gradient(circle at 90% 0%, rgba(17, 19, 24, 0.08), transparent 30%),
@@ -29,6 +28,24 @@ body {
     min-height: 100vh;
 }
 
+.ticket-report-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    align-items: stretch;
+}
+
+.ticket-report-row.no-admin {
+    grid-template-columns: 1fr;
+}
+
+.ticket-report-row > .panel {
+    margin-top: 0;
+}
+
+.ticket-report-row .section-title-row {
+    margin: 0 0 10px;
+}
 .hidden {
     display: none !important;
 }
@@ -317,23 +334,155 @@ main {
 .admin-event-report {
     display: grid;
     gap: 12px;
+    min-width: 0;
 }
 
 .admin-event-report-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.admin-report-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    align-items: start;
+    min-height: 100%;
+}
+
+.admin-trend-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.admin-trend-single-card {
+    border: 1px solid #e6dbc8;
+    border-radius: 12px;
+    background: #fffdf8;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    align-content: start;
+}
+
+.admin-trend-card {
+    border: 1px solid #e6dbc8;
+    border-radius: 12px;
+    background: #fffdf8;
+    padding: 10px;
+    display: grid;
     gap: 8px;
 }
 
-.admin-statement {
-    margin-bottom: 14px;
+.admin-trend-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.admin-trend-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.admin-trend-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-trend-nav .image-btn {
+    width: auto;
+    min-width: 36px;
+    padding: 8px 10px;
+}
+
+.admin-trend-head h3 {
+    margin: 0;
+    font-size: 13px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.admin-trend-switches {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-trend-switch {
+    width: auto;
+    border: 1px solid #d4c8b4;
+    background: #f7f0e4;
+    color: #2c3340;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.admin-trend-switch.is-active {
+    background: #25324a;
+    border-color: #25324a;
+    color: #fff;
+}
+
+.admin-trend-canvas {
+    width: 100%;
+    height: 220px;
+    border-radius: 10px;
+    border: 1px solid #efe6d8;
+    background: #fff;
+}
+
+.admin-trend-legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 0 4px;
+    color: #4d524f;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.admin-trend-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.income-dot {
+    background: #d46920;
+}
+
+.tickets-dot {
+    background: #2472c8;
 }
 
 .admin-statement-card {
     border: 1px solid #d6cab3;
     border-radius: 14px;
     background: linear-gradient(180deg, #fffaf0 0%, #fffdf8 100%);
-    box-shadow: 0 10px 22px rgba(17, 19, 24, 0.08);
     padding: 14px;
     display: grid;
     gap: 10px;
@@ -373,26 +522,33 @@ main {
 .admin-metric-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
 }
 
 .admin-metric-item {
     border: 1px solid #e7decb;
     border-radius: 10px;
     background: #fffaf0;
-    padding: 8px;
+    padding: 9px 10px;
     display: grid;
-    gap: 2px;
+    gap: 4px;
+    min-height: 64px;
+    min-width: 0;
 }
 
 .admin-metric-item span {
     font-size: 11px;
     color: #6e6658;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .admin-metric-item strong {
     font-size: 14px;
     color: #111318;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .event-card {
@@ -640,11 +796,23 @@ main {
     flex-direction: column;
     gap: 8px;
     min-height: 100%;
+    min-width: 0;
 }
 
 .event-media-column {
     display: grid;
+    align-content: start;
+    gap: 8px;
     min-width: 0;
+}
+
+#previewInfoMediaSlot:empty {
+    display: none;
+}
+
+#previewInfoMediaSlot .preview-info,
+#previewInfoContentSlot .preview-info {
+    margin: 0;
 }
 
 .event-image-wrap {
@@ -663,6 +831,7 @@ main {
     border-radius: 10px;
     background: #fffdf8;
     padding: 8px 10px;
+    min-width: 0;
 }
 
 .preview-info .image-btn {
@@ -675,6 +844,17 @@ main {
     align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
+    min-width: 0;
+}
+
+.event-heading-row h1,
+.preview-info .meta,
+.ticket-summary,
+.manager-box .helper,
+.manager-box h3,
+.ticket-panel h2 {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .quick-edit-btn {
@@ -856,6 +1036,7 @@ select {
     padding: 8px;
     display: grid;
     gap: 8px;
+    min-width: 0;
 }
 
 .manager-box h3,
@@ -1004,6 +1185,7 @@ select {
     gap: 16px;
     box-shadow: 0 2px 8px rgba(22, 26, 36, 0.05);
     transition: transform 0.2s ease, background 0.2s ease;
+    min-width: 0;
 }
 
 .ticket-card-row:hover {
@@ -1016,12 +1198,15 @@ select {
     font-size: 16px;
     font-weight: 600;
     color: #1e2532;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ticket-row-name-wrap {
     flex: 0 0 220px;
     display: grid;
     gap: 2px;
+    min-width: 0;
 }
 
 .ticket-row-note {
@@ -1029,6 +1214,8 @@ select {
     font-weight: 700;
     color: #6f6554;
     letter-spacing: 0.01em;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ticket-row-price {
@@ -1036,6 +1223,8 @@ select {
     font-size: 15px;
     font-weight: 700;
     color: #1e2532;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ticket-row-stepper {
@@ -1138,12 +1327,16 @@ select {
     display: block;
     font-size: 10px;
     color: var(--muted);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ticket-stat strong {
     display: block;
     margin-top: 2px;
     font-size: 12px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .ticket-card .actions {
@@ -1174,11 +1367,66 @@ select {
 }
 
 .ticket-panel {
-    padding: 18px;
+    padding: 16px;
 }
 
 .ticket-panel-inline {
     margin-top: 0;
+    height: 100%;
+}
+
+#adminEventReportSection {
+    height: 100%;
+    min-width: 0;
+    padding: 16px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+}
+
+#adminEventReportSection .section-title-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 8px;
+}
+
+#adminEventReportSection .section-title-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+#adminEventReportRoot {
+    min-width: 0;
+    height: 100%;
+}
+
+#adminEventReportSection {
+    height: 100%;
+    min-width: 0;
+    padding: 18px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+}
+
+#adminEventReportSection .section-title-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 8px;
+}
+
+#adminEventReportSection .section-title-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+#adminEventReportRoot {
+    min-width: 0;
+    height: 100%;
 }
 
 .ticket-checkout {
@@ -1695,12 +1943,24 @@ select {
         grid-template-columns: 1fr;
     }
 
+    .ticket-report-row {
+        grid-template-columns: 1fr;
+    }
+
     .event-media-column {
         max-width: 100%;
     }
 
     .ticket-list {
         grid-template-columns: 1fr;
+    }
+
+    .admin-trend-canvas {
+        height: 226px;
+    }
+
+    .admin-event-report-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -1716,6 +1976,23 @@ select {
 }
 
 @media (max-width: 700px) {
+    .admin-report-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-trend-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .admin-trend-canvas {
+        height: 190px;
+    }
+
+    .admin-event-report-grid {
+        grid-template-columns: 1fr;
+    }
+
     .grid {
         grid-template-columns: 1fr;
     }
