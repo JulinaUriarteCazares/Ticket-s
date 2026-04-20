@@ -95,6 +95,44 @@
       flex-wrap: wrap;
       gap: 10px;
     }
+    .payment-ticket-downloads {
+      display: grid;
+      gap: 10px;
+    }
+    .payment-ticket-downloads h2 {
+      margin: 0;
+    }
+    .payment-ticket-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .payment-ticket-row {
+      border: 1px solid #e3dac8;
+      border-radius: 12px;
+      padding: 12px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .payment-ticket-row strong {
+      display: block;
+      color: #151822;
+    }
+    .payment-ticket-row small {
+      color: #5f6574;
+    }
+    .payment-ticket-row button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 800;
+      background: #111827;
+      color: #fff;
+      cursor: pointer;
+    }
     .payment-actions button,
     .payment-actions a {
       border: 0;
@@ -160,6 +198,14 @@
         <div id="paymentItems" class="payment-summary-list">
           <div class="payment-item">Cargando detalle de pago...</div>
         </div>
+      </div>
+
+      <div id="ticketDownloadsSection" class="payment-ticket-downloads" style="display:none;">
+        <div class="payment-actions" style="justify-content:space-between;">
+          <h2>Boletos generados</h2>
+          <button id="downloadAllPaidTickets" class="primary" type="button">Descargar todos</button>
+        </div>
+        <div id="paymentTicketList" class="payment-ticket-grid"></div>
       </div>
 
       <div class="payment-actions">

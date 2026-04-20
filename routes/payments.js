@@ -536,11 +536,21 @@ router.get('/session/:sessionId', auth, async (req, res) => {
 
   try {
     const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
-    const paymentResult = await pool.query(
-      'SELECT * FROM stripe_payments WHERE stripe_session_id = $1',
-      [sessionId]
+    let paymentResult = await pool.query(
+      'SELECT * FROM stripe_payments WHERE stripe_session_id = $1 OR request_id = $2',
+      [sessionId, stripeSession.client_reference_id || stripeSession.metadata?.request_id || null]
     );
-    const paymentRow = paymentResult.rows[0] || null;
+    let paymentRow = paymentResult.rows[0] || null;
+
+    const stripePaid = ['paid', 'succeeded', 'complete'].includes(String(stripeSession.payment_status || '').toLowerCase());
+    if (stripePaid && paymentRow && String(paymentRow.status || '').toLowerCase() !== 'paid') {
+      await finalizePendingPayment(paymentRow, stripeSession);
+      paymentResult = await pool.query(
+        'SELECT * FROM stripe_payments WHERE stripe_session_id = $1 OR request_id = $2',
+        [sessionId, stripeSession.client_reference_id || stripeSession.metadata?.request_id || null]
+      );
+      paymentRow = paymentResult.rows[0] || paymentRow;
+    }
 
     return res.json({
       sessionId,

@@ -6,6 +6,9 @@
   const paymentStatusText = document.getElementById('paymentStatusText');
   const paymentItems = document.getElementById('paymentItems');
   const refreshButton = document.getElementById('refreshPayment');
+  const ticketDownloadsSection = document.getElementById('ticketDownloadsSection');
+  const paymentTicketList = document.getElementById('paymentTicketList');
+  const downloadAllPaidTickets = document.getElementById('downloadAllPaidTickets');
 
   function formatMoney(value) {
     return Number(value || 0).toLocaleString('es-MX', {
@@ -53,6 +56,11 @@
     }
   }
 
+  function clearBoletosCache() {
+    sessionStorage.removeItem('tm_boletos_cache');
+    sessionStorage.removeItem('tm_boletos_cache_time');
+  }
+
   function renderItems(items) {
     if (!Array.isArray(items) || !items.length) {
       paymentItems.innerHTML = '<div class="payment-item">No se encontraron items del pago.</div>';
@@ -71,6 +79,64 @@
         </div>
       `;
     }).join('');
+  }
+
+  function flattenTicketLines(items) {
+    const safeItems = Array.isArray(items) ? items : [];
+    const lines = [];
+
+    safeItems.forEach((item) => {
+      const quantity = Number(item.quantity || 0);
+      const seats = Array.isArray(item.seatLabels) ? item.seatLabels : [];
+
+      if (seats.length) {
+        seats.forEach((seatLabel) => {
+          lines.push({
+            eventName: item.eventName || 'Evento',
+            typeName: item.typeName || 'Boleto',
+            seatLabel: seatLabel || 'N/A',
+            unitPrice: Number(item.unitPrice || 0),
+          });
+        });
+      } else {
+        for (let index = 0; index < Math.max(quantity, 1); index += 1) {
+          lines.push({
+            eventName: item.eventName || 'Evento',
+            typeName: item.typeName || 'Boleto',
+            seatLabel: 'N/A',
+            unitPrice: Number(item.unitPrice || 0),
+          });
+        }
+      }
+    });
+
+    return lines;
+  }
+
+  function renderTicketDownloads(data, isPaid) {
+    const ticketIds = Array.isArray(data.ticketIds) ? data.ticketIds : [];
+    if (!isPaid || !ticketIds.length || !ticketDownloadsSection || !paymentTicketList) {
+      if (ticketDownloadsSection) {
+        ticketDownloadsSection.style.display = 'none';
+      }
+      return;
+    }
+
+    const lines = flattenTicketLines(Array.isArray(data.payload?.items) ? data.payload.items : []);
+    paymentTicketList.innerHTML = ticketIds.map((ticketId, index) => {
+      const line = lines[index] || {};
+      return `
+        <article class="payment-ticket-row">
+          <div>
+            <strong>${line.eventName || 'Evento'} · ${line.typeName || 'Boleto'}</strong>
+            <small>Asiento: ${line.seatLabel || 'N/A'} · Precio: $${formatMoney(line.unitPrice || 0)}</small>
+          </div>
+          <button type="button" data-ticket-id="${ticketId}">Descargar boleto</button>
+        </article>
+      `;
+    }).join('');
+
+    ticketDownloadsSection.style.display = 'grid';
   }
 
   async function apiCall(method, url) {
@@ -97,6 +163,54 @@
     }
 
     return data;
+  }
+
+  async function downloadSingleTicket(ticketId) {
+    const token = getToken();
+    const response = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/pdf`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!response.ok) {
+      throw new Error('No se pudo descargar el boleto');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `boleto-${ticketId}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadAllTickets(ticketIds) {
+    const token = getToken();
+    const response = await fetch('/api/tickets/bulk-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ ticket_ids: ticketIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error('No se pudieron descargar todos los boletos');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `boletos-${Date.now()}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   function updateUi(data) {
@@ -129,9 +243,11 @@
     }
 
     renderItems(Array.isArray(data.payload?.items) ? data.payload.items : []);
+    renderTicketDownloads(data, isPaid);
 
     if (isPaid) {
       clearCurrentCart();
+      clearBoletosCache();
     }
 
     return isPaid;
@@ -165,6 +281,36 @@
   if (refreshButton) {
     refreshButton.addEventListener('click', () => {
       loadPayment().catch((err) => notifyFallback(err.message));
+    });
+  }
+
+  if (paymentTicketList) {
+    paymentTicketList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-ticket-id]');
+      if (!button) {
+        return;
+      }
+
+      downloadSingleTicket(button.dataset.ticketId).catch((err) => notifyFallback(err.message));
+    });
+  }
+
+  if (downloadAllPaidTickets) {
+    downloadAllPaidTickets.addEventListener('click', async () => {
+      try {
+        const sessionId = getSessionId();
+        if (!sessionId) {
+          throw new Error('Sesion de pago no encontrada');
+        }
+        const data = await apiCall('GET', `/payments/session/${encodeURIComponent(sessionId)}`);
+        const ticketIds = Array.isArray(data.ticketIds) ? data.ticketIds : [];
+        if (!ticketIds.length) {
+          throw new Error('Aun no hay boletos generados para descargar');
+        }
+        await downloadAllTickets(ticketIds);
+      } catch (err) {
+        notifyFallback(err.message);
+      }
     });
   }
 
