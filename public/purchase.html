@@ -133,6 +133,7 @@
             user: null,
             eventId: null,
             event: null,
+            eventDetailsById: {},
             cart: [],
             seatWizard: {
                 open: false,
@@ -174,6 +175,7 @@
         const loginButton = document.getElementById('loginButton');
         const registerButton = document.getElementById('registerButton');
         let lastPurchasedTickets = [];
+        let cartEventHydrationInFlight = false;
 
         function getCartOwner(userId = state.user?.id || null) {
             return userId ? `user_${userId}` : 'guest';
@@ -357,6 +359,7 @@
                 .map((item) => ({
                     eventId: String(item?.eventId || fallbackEventId || ''),
                     eventName: String(item?.eventName || ''),
+                    eventArtistName: String(item?.eventArtistName || ''),
                     ticketTypeId: item?.ticketTypeId,
                     typeName: String(item?.typeName || 'Boleto'),
                     unitPrice: Number(item?.unitPrice || 0),
@@ -444,6 +447,7 @@
                     collected = collected.concat(normalized.map((item) => ({
                         ...item,
                         eventName: item.eventName || (String(eventId) === String(state.eventId || '') ? (state.event?.name || '') : ''),
+                        eventArtistName: item.eventArtistName || (String(eventId) === String(state.eventId || '') ? (state.event?.artist_name || '') : ''),
                     })));
                 } catch (err) {
                     continue;
@@ -464,6 +468,7 @@
                     quantity: Number(prev.quantity || 0) + Number(item.quantity || 0),
                     maxAvailable: Math.max(Number(prev.maxAvailable || 1), Number(item.maxAvailable || 1)),
                     eventName: prev.eventName || item.eventName,
+                    eventArtistName: prev.eventArtistName || item.eventArtistName,
                 });
             });
 
@@ -495,6 +500,7 @@
                     return {
                         eventId: String(state.eventId),
                         eventName: item.eventName || state.event?.name || '',
+                        eventArtistName: item.eventArtistName || state.event?.artist_name || '',
                         ticketTypeId: ticketType.id,
                         typeName: ticketType.type_name,
                         unitPrice: Number(ticketType.price),
@@ -882,10 +888,92 @@
             if (!event) {
                 return;
             }
+            state.eventDetailsById[String(event.id)] = {
+                name: String(event.name || ''),
+                artistName: String(event.artist_name || ''),
+            };
             document.getElementById('purchaseEventName').textContent = event.name || 'Evento';
             document.getElementById('purchaseEventMeta').textContent = `${formatDate(event.event_date, event.event_time)} | ${event.location || 'Ubicacion por confirmar'}`;
             document.getElementById('purchaseEventDescription').textContent = event.description || 'Sin descripcion';
             document.title = `Compra | ${event.name || 'Evento'}`;
+        }
+
+        function hydrateMissingCartEventDetails() {
+            if (cartEventHydrationInFlight || !Array.isArray(state.cart) || !state.cart.length) {
+                return;
+            }
+
+            const missingEventIds = [...new Set(
+                state.cart
+                    .filter((item) => (!item.eventName || !item.eventArtistName) && item.eventId)
+                    .map((item) => String(item.eventId))
+            )];
+
+            const pendingIds = missingEventIds.filter((eventId) => {
+                const cached = state.eventDetailsById[eventId];
+                return !(cached && cached.name && cached.artistName);
+            });
+
+            if (!pendingIds.length) {
+                const previous = JSON.stringify(state.cart);
+                state.cart = state.cart.map((item) => {
+                    const details = state.eventDetailsById[String(item.eventId || '')] || null;
+                    if (!details) {
+                        return item;
+                    }
+
+                    return {
+                        ...item,
+                        eventName: item.eventName || details.name || '',
+                        eventArtistName: item.eventArtistName || details.artistName || '',
+                    };
+                });
+
+                if (JSON.stringify(state.cart) !== previous) {
+                    saveCartToStorage();
+                    renderCart();
+                }
+                return;
+            }
+
+            cartEventHydrationInFlight = true;
+            Promise.all(
+                pendingIds.map(async (eventId) => {
+                    try {
+                        const event = await apiCall('GET', `/events/${eventId}`);
+                        state.eventDetailsById[eventId] = {
+                            name: String(event?.name || ''),
+                            artistName: String(event?.artist_name || ''),
+                        };
+                    } catch (err) {
+                        state.eventDetailsById[eventId] = state.eventDetailsById[eventId] || {
+                            name: '',
+                            artistName: '',
+                        };
+                    }
+                })
+            )
+                .finally(() => {
+                    cartEventHydrationInFlight = false;
+                    const previous = JSON.stringify(state.cart);
+                    state.cart = state.cart.map((item) => {
+                        const details = state.eventDetailsById[String(item.eventId || '')] || null;
+                        if (!details) {
+                            return item;
+                        }
+
+                        return {
+                            ...item,
+                            eventName: item.eventName || details.name || '',
+                            eventArtistName: item.eventArtistName || details.artistName || '',
+                        };
+                    });
+
+                    if (JSON.stringify(state.cart) !== previous) {
+                        saveCartToStorage();
+                        renderCart();
+                    }
+                });
         }
 
         function renderCheckoutRows() {
@@ -953,6 +1041,8 @@
                 return;
             }
 
+            hydrateMissingCartEventDetails();
+
             let total = 0;
 
             const grouped = state.cart.reduce((acc, item) => {
@@ -967,6 +1057,7 @@
             const blocks = Object.keys(grouped).map((eventId) => {
                 const items = grouped[eventId];
                 const eventName = items[0]?.eventName || `Evento ${eventId}`;
+                const eventArtistName = items[0]?.eventArtistName || (String(eventId) === String(state.eventId || '') ? (state.event?.artist_name || '') : 'Por confirmar');
                 const rows = items.map((item) => {
                     const subtotal = Number(item.unitPrice) * Number(item.quantity);
                     total += subtotal;
@@ -988,7 +1079,8 @@
 
                 return `
                     <section class="panel" style="padding:10px; border-style:dashed;">
-                        <h3 style="margin:0 0 8px;">${eventName}</h3>
+                        <h3 style="margin:0 0 8px;">${escapeHtml(eventName)}</h3>
+                        <p class="event-meta" style="margin:0 0 10px;">Artista: ${escapeHtml(eventArtistName)}</p>
                         <div class="cart-list">${rows}</div>
                     </section>
                 `;
@@ -1035,10 +1127,12 @@
                 existing.quantity += qty;
                 existing.maxAvailable = available;
                 existing.eventName = existing.eventName || state.event?.name || '';
+                existing.eventArtistName = existing.eventArtistName || state.event?.artist_name || '';
             } else {
                 state.cart.push({
                     eventId: String(state.eventId),
                     eventName: state.event?.name || '',
+                    eventArtistName: state.event?.artist_name || '',
                     ticketTypeId: ticketType.id,
                     typeName: ticketType.type_name,
                     unitPrice: Number(ticketType.price),
