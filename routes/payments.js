@@ -85,6 +85,78 @@ async function cleanupExpiredReservations(client) {
   );
 }
 
+async function releaseReservedSeatsForItems(client, items, userId) {
+  const supportsSeats = await ensureSeatsSupport();
+  if (!supportsSeats) {
+    return;
+  }
+
+  const safeItems = Array.isArray(items) ? items : [];
+  for (const item of safeItems) {
+    const ticketTypeId = String(item?.ticketTypeId || '').trim();
+    const labels = Array.isArray(item?.seatLabels)
+      ? [...new Set(item.seatLabels.map((label) => String(label || '').trim().toUpperCase()).filter(Boolean))]
+      : [];
+
+    if (!ticketTypeId || !labels.length) {
+      continue;
+    }
+
+    await client.query(
+      `UPDATE seats
+       SET status = 'available',
+           reserved_by = NULL,
+           reserved_until = NULL
+       WHERE ticket_type_id = $1
+         AND UPPER(seat_label) = ANY($2::text[])
+         AND status = 'reserved'
+         AND (reserved_by IS NULL OR reserved_by::text = $3)`,
+      [ticketTypeId, labels, String(userId || '')]
+    );
+  }
+}
+
+async function closePendingPaymentAndReleaseSeats(client, paymentRow, nextStatus, stripeStatus, errorMessage = null) {
+  if (!paymentRow || String(paymentRow.status || '').toLowerCase() !== 'pending') {
+    return;
+  }
+
+  const items = Array.isArray(paymentRow.payload?.items) ? paymentRow.payload.items : [];
+  await releaseReservedSeatsForItems(client, items, paymentRow.user_id);
+
+  await client.query(
+    `UPDATE stripe_payments
+     SET status = $2,
+         stripe_status = $3,
+         error_message = $4,
+         updated_at = NOW()
+     WHERE id = $1
+       AND status = 'pending'`,
+    [paymentRow.id, nextStatus, stripeStatus, errorMessage]
+  );
+}
+
+async function closePreviousPendingPaymentsForUser(client, userId) {
+  const pendingResult = await client.query(
+    `SELECT *
+     FROM stripe_payments
+     WHERE user_id = $1
+       AND status = 'pending'
+     FOR UPDATE`,
+    [String(userId)]
+  );
+
+  for (const pendingPayment of pendingResult.rows) {
+    await closePendingPaymentAndReleaseSeats(
+      client,
+      pendingPayment,
+      'abandoned',
+      'superseded',
+      'Checkout reemplazado por un nuevo intento de pago'
+    );
+  }
+}
+
 async function ensurePaymentSupport(client) {
   await client.query(
     `CREATE TABLE IF NOT EXISTS stripe_payments (
@@ -386,6 +458,7 @@ router.post('/create-checkout-session', auth, async (req, res) => {
     await client.query('BEGIN');
     await ensurePaymentSupport(client);
     await cleanupExpiredReservations(client);
+    await closePreviousPendingPaymentsForUser(client, req.user.id);
 
     const userResult = await client.query(
       'SELECT id, name, email FROM users WHERE id = $1',
@@ -552,6 +625,38 @@ router.get('/session/:sessionId', auth, async (req, res) => {
       paymentRow = paymentResult.rows[0] || paymentRow;
     }
 
+    if (!stripePaid && paymentRow && String(paymentRow.status || '').toLowerCase() === 'pending') {
+      const stripeSessionStatus = String(stripeSession.status || '').toLowerCase();
+      const stripePaymentStatus = String(stripeSession.payment_status || '').toLowerCase();
+      const isExpiredOrCanceled = stripeSessionStatus === 'expired' || stripePaymentStatus === 'canceled';
+
+      if (isExpiredOrCanceled) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          await closePendingPaymentAndReleaseSeats(
+            client,
+            paymentRow,
+            'expired',
+            stripePaymentStatus || stripeSessionStatus || 'expired',
+            'Sesion de pago expirada o cancelada sin confirmacion'
+          );
+          await client.query('COMMIT');
+        } catch (releaseErr) {
+          await client.query('ROLLBACK');
+          throw releaseErr;
+        } finally {
+          client.release();
+        }
+
+        paymentResult = await pool.query(
+          'SELECT * FROM stripe_payments WHERE stripe_session_id = $1 OR request_id = $2',
+          [sessionId, stripeSession.client_reference_id || stripeSession.metadata?.request_id || null]
+        );
+        paymentRow = paymentResult.rows[0] || paymentRow;
+      }
+    }
+
     return res.json({
       sessionId,
       status: paymentRow?.status || stripeSession.payment_status || 'unknown',
@@ -602,20 +707,29 @@ async function webhookHandler(req, res) {
 
     if (event.type === 'checkout.session.expired') {
       const session = event.data.object;
-      const paymentResult = await pool.query(
-        'SELECT * FROM stripe_payments WHERE stripe_session_id = $1',
-        [session.id]
-      );
-      const paymentRow = paymentResult.rows[0];
-      if (paymentRow) {
-        await pool.query(
-          `UPDATE stripe_payments
-           SET status = 'expired',
-               stripe_status = $2,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [paymentRow.id, session.payment_status || 'expired']
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const paymentResult = await client.query(
+          'SELECT * FROM stripe_payments WHERE stripe_session_id = $1 FOR UPDATE',
+          [session.id]
         );
+        const paymentRow = paymentResult.rows[0];
+        if (paymentRow) {
+          await closePendingPaymentAndReleaseSeats(
+            client,
+            paymentRow,
+            'expired',
+            session.payment_status || 'expired',
+            'Sesion de pago expirada sin confirmacion'
+          );
+        }
+        await client.query('COMMIT');
+      } catch (webhookErr) {
+        await client.query('ROLLBACK');
+        throw webhookErr;
+      } finally {
+        client.release();
       }
     }
 
